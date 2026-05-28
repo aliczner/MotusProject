@@ -162,3 +162,21 @@ detailed_data <- all_detections %>%
 print(detailed_data)
 
 write.csv(detailed_data, "species_station_daily.csv")
+
+#===================================================================
+# species summary
+# =================================================================
+
+species_overview <- all_detections %>% 
+  group_by(species = species, 
+           year = year_start) %>% 
+  summarise (
+    number_of_stations = n_distinct(CurrentStationID), 
+    number_of_detections = n (), 
+    number_of_tags_detected = n_distinct(tagDeployID), 
+    .groups = "drop"
+    ) %>% 
+    arrange (species, year)
+
+write.csv(species_overview, "species_overview.csv")
+
