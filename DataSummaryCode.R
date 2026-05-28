@@ -136,4 +136,23 @@ print(species_station_yearly)
 
 write.csv(species_station_yearly, "species_station_yearly.csv")
 
-#species by day by year by station
+# ============================================================
+# species by day by year by station
+# ============================================================
+
+detailed_data <- all_detections %>%
+  mutate(
+    date_only = as.Date(tsStart_dt), #add column of just date no time
+    day_of_year = yday(tsStart_dt) # add column of Julian date, might be useful
+  ) %>%
+  group_by(stationID = CurrentStationID, species, year = year_start, date_only, day_of_year) %>%
+  summarise(
+    number_of_detections = n(),
+    number_of_tags_detected = n_distinct(tagDeployID),
+    .groups = "drop"
+  ) %>%
+  arrange(stationID, date_only, species) #order the detections
+
+print(detailed_data)
+
+write.csv(detailed_data, "species_station_daily.csv")
