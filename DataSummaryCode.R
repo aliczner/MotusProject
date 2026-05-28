@@ -18,25 +18,26 @@ Sys.setenv(TZ = "UTC") #sets the working environment to be in UTC to match motus
 # ===============================================================
 # year range, missing years, species #, detection #, tag #
 
-# 1. Define the folder path with the station data
+# Define the folder path with the station data
 folder_path <- "StationDownloads"
 
-# 2. List all CSV files in the folder
+# List all CSV files in the folder
 file_list <- list.files(path = folder_path, 
                         pattern = "\\.csv$", 
                         full.names = TRUE)
 
+#apply function to the file list
 all_detections <- map_df(file_list, function(file) {
   
-# 3. Extract Station ID from the filename
-  filename_clean <- basename(file)
+# Extract Station ID from the filename
+  filename_clean <- basename(file) #basename removes filepath from name
+  #looks for "station-" then captures all digits until hits a number
   extracted_station_id <- str_extract(filename_clean, "(?<=station-)\\d+")
   
-# 4. Read individual file
+# read_csv (readr) to import and read each .csv file in the folder
   data_raw <- read_csv(file, show_col_types = FALSE)
-  if (nrow(data_raw) == 0) return(NULL) 
   
-# 5. Clean timestamps and extract years
+# Format the date columns using lubridate functions
   data_cleaned <- data_raw %>%
     mutate(
       CurrentStationID = extracted_station_id,
@@ -49,17 +50,17 @@ all_detections <- map_df(file_list, function(file) {
   return(data_cleaned)
 })
   
-# 5. overview summary 
+# overview summary 
 station_overview <- all_detections %>%
 group_by(stationID = CurrentStationID) %>%
   summarise(
-    earliest_detection_raw = min(tsStart_dt, na.rm = TRUE),
+    earliest_detection_raw = min(tsStart_dt, na.rm = TRUE),#date range
     latest_detection_raw   = max(tsEnd_dt, na.rm = TRUE),
     
-    min_y = min(c(year_start, year_end), na.rm = TRUE),
+    min_y = min(c(year_start, year_end), na.rm = TRUE), #year range
     max_y = max(c(year_start, year_end), na.rm = TRUE),
     
-    years_present = list(unique(c(year_start, year_end))),
+    years_present = list(unique(c(year_start, year_end))), #list years
     
     number_of_species = n_distinct(species),
     number_of_detections = n(),
@@ -73,9 +74,10 @@ group_by(stationID = CurrentStationID) %>%
     latest_detection   = format(latest_detection_raw, 
                                 "%d %b %Y %H:%M:%S UTC"),
     
-    full_sequence = list(min_y:max_y),
+    full_sequence = list(min_y:max_y), #list years with data
+    #find if there are missing data years by comparing two lists of years
     missing_years_vec = list(setdiff(full_sequence, years_present)),
-    
+    #puts the number of missing years, or 0 if there are none
     num_years_no_detection = length(missing_years_vec),
     years_missing_detections = if_else(
       num_years_no_detection > 0, 
@@ -84,10 +86,10 @@ group_by(stationID = CurrentStationID) %>%
     ),
     
     year_range = if_else(min_y == max_y, 
-                         as.character(min_y), 
+                         as.character(min_y), #if only one year prints that year
                          paste(min_y, 
                                max_y, 
-                               sep = "-")
+                               sep = "-") 
                          ),
     number_of_years = max_y - min_y
   ) %>%
@@ -145,7 +147,11 @@ detailed_data <- all_detections %>%
     date_only = as.Date(tsStart_dt), #add column of just date no time
     day_of_year = yday(tsStart_dt) # add column of Julian date, might be useful
   ) %>%
-  group_by(stationID = CurrentStationID, species, year = year_start, date_only, day_of_year) %>%
+  group_by(stationID = CurrentStationID, 
+           species, 
+           year = year_start, 
+           date_only, 
+           day_of_year) %>%
   summarise(
     number_of_detections = n(),
     number_of_tags_detected = n_distinct(tagDeployID),
