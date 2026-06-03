@@ -1,4 +1,4 @@
-#obtaining data from motus towers
+#obtaining data from motus towers downloading from motus website
 
 library(motus)
 library(lubridate)
@@ -13,8 +13,6 @@ Sys.setenv(TZ = "UTC") #sets the working environment to be in UTC to match motus
 #tower at Western UWO - SSC (#11645)
 #receiver CTT-7292E3C5E490
 
-proj.num <- "CTT-7292E3C5E490"
-sql_motus <- tagme(projRecv = proj.num, new = TRUE)
 
 # ================================================================
 # summarize station overview workflow
