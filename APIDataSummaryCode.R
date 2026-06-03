@@ -23,6 +23,12 @@ sql_motus <- tagme(projRecv = proj.num,
                    skipNodes = TRUE, 
                    skipDeprecated = TRUE)
 
+## testing Sauble Beach Tower
+
+sql_motus.sauble <- tagme(projRecv = "CTT-V3023D10185C",
+                          new = TRUE) #started at 3:22 pm
+
+
 # ================================================
 # getting detection data
 # ================================================
