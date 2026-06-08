@@ -8,11 +8,7 @@ library(stringr)
 library(readr)
 library(tidyr)
 
-Sys.setenv(TZ = "UTC") #sets the working environment to be in UTC to match motus
-
-#tower at Western UWO - SSC (#11645)
-#receiver CTT-7292E3C5E490
-
+Sys.setenv(TZ = "UTC") 
 
 # ================================================================
 # summarize station overview workflow
