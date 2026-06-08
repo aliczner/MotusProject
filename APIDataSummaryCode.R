@@ -42,19 +42,36 @@ library(DBI)
 library(RSQLite)
 
 dbListTables(sql_motus) #to view tables
-dbListFields(sql_motus, "alltags") #to view fields of tables
+dbListFields(sql_motus, "recvs") #to view fields of tables
 
+#creating tbls
 alltags.tbl <- tbl(sql_motus, "alltags") #convert to table
+tags.tbl <- tbl(sql_motus, "tags")
 deps.tbl <- tbl(sql_motus, "tagDeps")
 sp.tbl <- tbl(sql_motus, "species")
 tagProp.tbl <- tbl(sql_motus, "tagProps")
 recvDep.tbl <- tbl(sql_motus, "recvDeps")
+antDep.tbl <-tbl(sql_motus, "antDeps")
+runs.tbl <- tbl (sql_motus, "allruns")
+ambigs.tbl <- tbl(sql_motus, "allambigs")
 
+#converting tbls into data frames
 alltags.df <- alltags.tbl %>% 
   collect() %>% 
   as.data.frame
 
+alltags.df2 <- alltags.df %>%
+mutate(time = as_datetime(ts))
+
 write.csv (alltags.df, "UWO-SSCAllTags.csv")
+
+ambigs.df <- ambigs.tbl %>% 
+  collect () %>% 
+  as.data.frame
+
+tags.df <- tags.tbl %>% 
+  collect() %>% 
+  as.data.frame
 
 deps.df <- deps.tbl %>% 
   collect() %>% 
@@ -66,35 +83,74 @@ recvDeps.df <- recvDep.tbl %>%
   collect() %>% 
   as.data.frame
 
-#====================================================
+antDep.df <- antDep.tbl %>% 
+  select(deployID, port, antennaType, bearing, heightMeters) %>%
+  collect() %>%
+  as.data.frame()
+
+species.df <- sp.tbl %>% 
+  collect () %>% 
+  as.data.frame
+
+runs.df <- runs.tbl %>% 
+  collect() %>% 
+  as.data.frame
+
+# checking if there are multiple deployments for any dags
+alltags.df %>%
+  select(motusTagID, tagDeployID) %>%
+  filter(!(is.na(tagDeployID))) %>% # remove NA tagDeployIDs
+  distinct() %>%
+  group_by(motusTagID) %>%
+  mutate(n = n()) %>%
+  filter(n > 1)
+
+#there are multiple tag IDs so creating motudTagDepID to have unique IDs
+
+alltags.df <- alltags.df %>%
+  mutate(motusTagDepID = paste(motusTagID, tagDeployID, sep = "."))
+#same but for metadata
+deps.df <- deps.df %>%
+  mutate(motusTagDepID = paste(tagID, deployID, sep = "."))
+
+#fix time in receiver deployments
+
+recvDeps.df <- recvDeps.df %>% 
+  mutate(timeStart = as_datetime(tsStart),
+         timeEnd = as_datetime(tsEnd))
+
+#adding in receiver and antenna metadata
+
+recvDeps.df <- recvDeps.df %>% 
+  select(deployID, receiverType, deviceID, name, latitude, longitude, 
+         isMobile, timeStart, timeEnd, projectID, elevation) 
+
+stationDeps.df <- left_join(recvDeps.df, antDep.df, by = "deployID")
+
 # adding additional bird metadata
-#====================================================
+head(alltags.df) #fill columns in this one
+alltagsspecies.df <- species.df %>% 
+  select(speciesID = id, 
+         speciesEN = english, 
+         speciesSci = scientific, 
+         speciesGroup = group) %>%  #to get species name
+  right_join(alltags.df)
 
-#adding sex and age where possible
-alltags.deps <- alltags.df %>%
-  left_join(
-    deps.df %>% 
-      select(tagID, speciesID, markerNumber, sex, age),
-    by = c(
-      "motusTagID" = "tagID",        
-      "speciesID" = "speciesID",    
-      "markerNumber" = "markerNumber"  
-    )
-  )
+alltags.deps <- deps.df %>%
+  select(motusTagDepID, sex, age ) %>% 
+  right_join(alltagsspecies.df) %>% 
+  mutate(time = as_datetime(ts))
 
-##adding in receiver data
-alltags.recvs <- alltags.deps %>% 
-#Drop the empty columns from the main data so there's no naming conflict
-  select(-recvSiteName, -recvDeployLat, -recvDeployLon) %>% 
-  #now join
-  left_join(
-    recvDeps.df %>% 
-      select(serno, name, stationLat, stationLon) %>% 
-      rename(
-        recvSiteName  = name,
-        recvDeployLat = stationLat,
-        recvDeployLon = stationLon
-      ), 
-    by = c("recv" = "serno")
-  )
-  
+runs.df <- runs.df %>% 
+  mutate(RunBegin = as_datetime(tsBegin),
+         RunEnd = as_datetime(tsEnd))
+
+write.csv(runs.df, "UWO-SSCruns.csv")
+
+alltags.runs <- runs.df %>% 
+  select(runID, RunBegin, RunEnd) %>% 
+  right_join(alltags.deps) %>% 
+  distinct()
+
+write.csv(alltags.deps, "UWO-SSCDetectionsRaw.csv")
+
