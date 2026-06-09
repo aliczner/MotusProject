@@ -15,10 +15,17 @@ Sys.setenv(TZ = "UTC")
 # ===============================================================
 # year range, missing years, species #, detection #, tag #
 
-data_raw <- read.csv("./StationDownloads/Motus-data-project-1_detections_downloaded-2026-06-03.csv")
+data_active <- read.csv("./StationDownloads/Motus-data-project-1_detections_downloaded-2026-06-03.csv")
 #at first just did active towers to prevent crashing
-data_inactive <- read.csv ("./StationDownloads/Motus-data-multiple-stations_stations_downloaded-2026-06-09.csv")
+data_inactive <- read.csv ("./StationDownloads/Motus-data-multiple-stations_detections_downloaded-2026-06-09.csv")
 
+#the inactive data had frequency as num, convert so it matches
+data_inactive <- data_inactive |> 
+  mutate(tagFrequency = as.character(tagFrequency))
+
+#join active and inactive stations together
+
+data_raw <- bind_rows(data_active, data_inactive)
 
 # Format the date columns using lubridate functions
 data_cleaned <- data_raw %>%
