@@ -36,7 +36,47 @@ data_cleaned <- data_raw %>%
     year_end   = year(tsEnd_dt)
     )
 
-station_overview <- data_cleaned %>%
+#================================================================
+# Station metadata json file
+#================================================================
+
+# Station metadata json file with GPS coordinates
+stationsJSON <- jsonlite::read_json("./JSONFiles/Stations.json")
+
+stationsJSON <- jsonlite::fromJSON("./JSONFiles/Stations.json", 
+                                   simplifyDataFrame = TRUE)
+
+readr::write_csv(stationsJSON$results, "StationsJSON.csv")
+
+#getting coordinates from stationsJSON to make a lookup table for 
+# previous tower coordinates
+id_coords_lookup <- stationsJSON$results %>% 
+  select(stationID, latitude, longitude) %>% 
+  filter(!is.na(latitude) & !is.na(longitude)) %>% 
+  distinct(stationID, .keep_all = TRUE)
+
+# Add previous tower coordinates using the ID columns
+summary_coords <- data_cleaned %>% 
+  # convert to integer, from character
+  mutate(previousStationID = as.integer(previousStationID)) %>% 
+  
+  # Join the lookup table to the previousStationID column
+  left_join(
+    id_coords_lookup, 
+    by = c("previousStationID" = "stationID")
+  ) %>% 
+  
+  # Rename the new columns oordinates
+  rename(
+    lat_previous = latitude,
+    lon_previous = longitude
+  )
+
+#===================================================================
+# data cleaning and binning by time periods
+# ==================================================================
+
+station_overview <- summary_coords %>%
 #Classify migration periods and seasons based on tsStart_dt
   mutate(
 #using month and day as a number (MMDD)
@@ -63,8 +103,8 @@ station_overview <- data_cleaned %>%
       TRUE                                        ~ "stopover_unknown"
     )
   ) %>%
-  # Group by station AND season
-  group_by(stationName, season) %>%
+  # Group by station and season
+  group_by(stationName, season, lat, lon, lat_previous, lon_previous) %>%
   summarise(
     earliest_detection_raw = min(tsStart_dt, na.rm = TRUE),
     latest_detection_raw   = max(tsEnd_dt, na.rm = TRUE),
@@ -135,7 +175,11 @@ station_overview <- data_cleaned %>%
     stopover_48_72,
     stopover_72_96,
     stopover_96_168,
-    stopover_over_168
+    stopover_over_168,
+    lat,
+    lon,
+    lat_previous,
+    lon_previous
   )
 
 write_csv(station_overview, "combined_station_overview.csv")
@@ -145,7 +189,7 @@ write_csv(station_overview, "combined_station_overview.csv")
 #=====================================================================
 #comparing which towers are most often connected for each sp and year
 
-station_pairs_summary <- data_cleaned %>%
+station_pairs_summary <- summary_coords %>%
 
   #Classify Seasons 
   mutate(
@@ -175,7 +219,14 @@ station_pairs_summary <- data_cleaned %>%
   ) %>%
   
   # Group by station connections species, and season
-  group_by(previousStationName, stationName, species, season) %>%
+  group_by(previousStationName, 
+           stationName, 
+           species, 
+           season,
+           lat,
+           lon,
+           lat_previous,
+           lon_previous) %>%
   
   # Aggregate tracking and stopover metrics for this specific link
   summarise(
@@ -215,15 +266,6 @@ station_pairs_summary
 write.csv(station_pairs_summary, "station_pairs_summary.csv")
 
 
-#================================================================
-# Station metadata json file
-#================================================================
 
 
-stationsJSON <- jsonlite::read_json("./JSONFiles/Stations.json")
-
-stationsJSON <- jsonlite::fromJSON("./JSONFiles/Stations.json", 
-                                   simplifyDataFrame = TRUE)
-
-readr::write_csv(stationsJSON$results, "StationsJSON.csv")
 
