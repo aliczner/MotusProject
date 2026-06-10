@@ -3,7 +3,7 @@
 
 library(sf)
 
-radar.data <- read.csv ("RadarStationLocations.csv")
+radar.data <- read.csv ("./radarFiles/RadarStationLocations.csv")
 
 radar.ON <- subset(radar.data, Province == "ON")
 
@@ -11,8 +11,8 @@ radar_sf <- st_as_sf(radar.ON,
                      coords = c("Longitude", "Latitude"), 
                      crs = 4326)
 
-#reproject to Canada Atlas Lambert
-radar_projected <- st_transform(radar_sf, crs = 3978)
+#reproject to lambert conformal conic
+radar_projected <- st_transform(radar_sf, crs = 3348)
 
 #create buffers around radar to make the polygon
 # using three sizes to choose from
