@@ -20,7 +20,7 @@ data_active <- read.csv("./StationDownloads/Motus-data-project-1_detections_down
 data_inactive <- read.csv ("./StationDownloads/Motus-data-multiple-stations_detections_downloaded-2026-06-09.csv")
 
 #the inactive data had frequency as num, convert so it matches
-data_inactive <- data_inactive |> 
+data_inactive <- data_inactive %>%  
   mutate(tagFrequency = as.character(tagFrequency))
 
 #join active and inactive stations together
@@ -104,10 +104,18 @@ station_overview <- summary_coords %>%
     )
   ) %>%
   # Group by station and season
-  group_by(stationName, season, lat, lon, lat_previous, lon_previous) %>%
+  group_by(stationID, 
+           previousStationID,
+           season, 
+           lat, 
+           lon, 
+           lat_previous, 
+           lon_previous) %>%
   summarise(
+    stationName = first(stationName), #adds station names without grouping
+    previousStationName = first(previousStationName),
     earliest_detection_raw = min(tsStart_dt, na.rm = TRUE),
-    latest_detection_raw   = max(tsEnd_dt, na.rm = TRUE),
+    latest_detection_raw = max(tsEnd_dt, na.rm = TRUE),
     
     min_y = min(c(year_start, year_end), na.rm = TRUE),
     max_y = max(c(year_start, year_end), na.rm = TRUE),
@@ -135,7 +143,7 @@ station_overview <- summary_coords %>%
   rowwise() %>%
   mutate(
     earliest_detection = format(earliest_detection_raw, "%d %b %Y %H:%M:%S UTC"),
-    latest_detection   = format(latest_detection_raw, "%d %b %Y %H:%M:%S UTC"),,
+    latest_detection   = format(latest_detection_raw, "%d %b %Y %H:%M:%S UTC"),
     
     year_range = if_else(min_y == max_y, 
                          as.character(min_y), 
@@ -144,7 +152,8 @@ station_overview <- summary_coords %>%
     
     # Find the missing operational years in the sequence range
     full_sequence = list(min_y:max_y),
-    missing_years_vec = list(setdiff(unlist(full_sequence), unlist(years_present_list))),
+    missing_years_vec = list(setdiff(unlist(full_sequence), 
+                                     unlist(years_present_list))),
     
     # Save these explicitly as normal, flat data columns (No list nesting here!)
     num_years_no_detection = length(unlist(missing_years_vec)),
@@ -156,7 +165,10 @@ station_overview <- summary_coords %>%
   ) %>%
   ungroup() %>%
   select(
+    stationID,
+    previousStationID,
     stationName, 
+    previousStationName,
     season, 
     earliest_detection,
     latest_detection,
@@ -219,8 +231,8 @@ station_pairs_summary <- summary_coords %>%
   ) %>%
   
   # Group by station connections species, and season
-  group_by(previousStationName, 
-           stationName, 
+  group_by(stationID,
+           previousStationID,
            species, 
            season,
            lat,
@@ -230,6 +242,8 @@ station_pairs_summary <- summary_coords %>%
   
   # Aggregate tracking and stopover metrics for this specific link
   summarise(
+    stationName = first(stationName),
+    previousStationName = first(previousStationName),
     number_of_movements = n(),
     number_of_individual_tags = n_distinct(tagDeployID), 
     
