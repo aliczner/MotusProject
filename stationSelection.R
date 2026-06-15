@@ -7,7 +7,7 @@ library (sf)
 
 Sys.setenv(TZ = "UTC")
 
-station_pairs <- read.csv("station_pairs_summary.csv") #24969 obs
+station_pairs <- read.csv("observationSummary.csv") #78591 obs
 
 #====================================================================
 # station pair filtering column creation for later filtering
@@ -21,7 +21,7 @@ filtered_pairs <- station_pairs %>%
     previousStationName != "Unknown",
     previousStationName != "Unknown station"
   )
-#21942 obs
+#55283 obs
 
 #loading great lakes watershed polygon, contains subbasins for each lake
 GLWatershed <- st_read("./greatlakes_subbasins/greatlakes_subbasins.shp")
@@ -55,12 +55,15 @@ filtered_pairs$distance_km <- as.numeric(st_distance(current_sf,
                                                      by_element = TRUE)
                                          ) / 1000 #convert to km
 
-# Mark TRUE if distance is 30 - 965 km, otherwise FALSE
-# < 30 km could be in range of another tower
-# > 965 km is beyond what a bird could fly in a day during migration
+# Mark TRUE if distance is 30 - 965 km, otherwise
+#FALSE_LESS if distance is less than 30 km 
+# FALSE_MORE if distance is more than 965 km
 
-filtered_pairs$valid_distance <- filtered_pairs$distance_km >= 30 & 
-                                  filtered_pairs$distance_km <= 965
+filtered_pairs$valid_distance <- ifelse(filtered_pairs$distance_km < 30, 
+                                        "FALSE_LESS",
+                                        ifelse(filtered_pairs$distance_km > 965, 
+                                               "FALSE_MORE", 
+                                               "TRUE"))
 
 #==================================================================
 # station pair filtering by criteria
@@ -69,13 +72,15 @@ filtered_pairs$valid_distance <- filtered_pairs$distance_km >= 30 &
 filtered_df <- filtered_pairs %>%
   filter(
     # Keep if either the current OR the previous station is in GLWS
-    (current_in_GLWS | previous_in_GLWS),
-    
-    # Keep only if paired points falls within 30km to 965km distance
-    valid_distance == TRUE
-  )
+    (current_in_GLWS | previous_in_GLWS))
 
-str(filtered_df) #9214 obs
+str(filtered_df) #15117 obs
+
+table(filtered_pairs$valid_distance)
+#Valid_distance
+#TRUE 18623
+#FALSE_LESS 27922
+#FALSE_MORE 3646
 
 write.csv(filtered_df, "StationPairsFiltered.csv")
 

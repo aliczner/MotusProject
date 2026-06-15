@@ -73,7 +73,7 @@ summary_coords <- data_cleaned %>%
   )
 
 #===================================================================
-# data cleaning and binning by time periods
+# data cleaning and binning by time periods for station overview
 # ==================================================================
 
 station_overview <- summary_coords %>%
@@ -88,21 +88,7 @@ station_overview <- summary_coords %>%
       TRUE                     ~ "Winter" # mid-Nov to mid-Apr 
     )
   ) %>%
-  #Binning the stopover duration
-  mutate(
-    stopover_bin = case_when(
-      stopoverDurationHours == 0                  ~ "stopover_0",
-      stopoverDurationHours > 0  & stopoverDurationHours < 1   ~ "stopover_under_1",
-      stopoverDurationHours >= 1  & stopoverDurationHours <= 12  ~ "stopover_1_12",
-      stopoverDurationHours > 12 & stopoverDurationHours <= 24  ~ "stopover_12_24",
-      stopoverDurationHours > 24 & stopoverDurationHours <= 48  ~ "stopover_24_48",
-      stopoverDurationHours > 48 & stopoverDurationHours <= 72  ~ "stopover_48_72",
-      stopoverDurationHours > 72 & stopoverDurationHours <= 96  ~ "stopover_72_96",
-      stopoverDurationHours > 96 & stopoverDurationHours <= 168 ~ "stopover_96_168",
-      stopoverDurationHours > 168                 ~ "stopover_over_168",
-      TRUE                                        ~ "stopover_unknown"
-    )
-  ) %>%
+
   # Group by station and season
   group_by(stationID, 
            previousStationID,
@@ -125,17 +111,6 @@ station_overview <- summary_coords %>%
     number_of_species = n_distinct(species),
     number_of_detections = n(),
     number_of_tags = n_distinct(tagDeployID),
-    
-    #count the number of detections in each stopover bins and make summaries
-    stopover_0       = sum(stopover_bin == "stopover_0", na.rm = TRUE),
-    stopover_under_1  = sum(stopover_bin == "stopover_under_1", na.rm = TRUE),
-    stopover_1_12     = sum(stopover_bin == "stopover_1_12", na.rm = TRUE),
-    stopover_12_24    = sum(stopover_bin == "stopover_12_24", na.rm = TRUE),
-    stopover_24_48   = sum(stopover_bin == "stopover_24_48", na.rm = TRUE),
-    stopover_48_72   = sum(stopover_bin == "stopover_48_72", na.rm = TRUE),
-    stopover_72_96    = sum(stopover_bin == "stopover_72_96", na.rm = TRUE),
-    stopover_96_168  = sum(stopover_bin == "stopover_96_168", na.rm = TRUE),
-    stopover_over_168 = sum(stopover_bin == "stopover_over_168", na.rm = TRUE),
     
     .groups = "drop"
   ) %>%
@@ -179,15 +154,6 @@ station_overview <- summary_coords %>%
     number_of_species, 
     number_of_detections, 
     number_of_tags,
-    stopover_0,
-    stopover_under_1,
-    stopover_1_12,
-    stopover_12_24,
-    stopover_24_48,
-    stopover_48_72,
-    stopover_72_96,
-    stopover_96_168,
-    stopover_over_168,
     lat,
     lon,
     lat_previous,
@@ -214,22 +180,6 @@ station_pairs_summary <- summary_coords %>%
     )
   ) %>%
   
-  # Bin the stopover duration at the current station
-  mutate(
-    stopover_bin = case_when(
-      stopoverDurationHours == 0                  ~ "stopover_0",
-      stopoverDurationHours > 0  & stopoverDurationHours < 1   ~ "stopover_under_1",
-      stopoverDurationHours >= 1  & stopoverDurationHours <= 12  ~ "stopover_1_12",
-      stopoverDurationHours > 12 & stopoverDurationHours <= 24  ~ "stopover_12_24",
-      stopoverDurationHours > 24 & stopoverDurationHours <= 48  ~ "stopover_24_48",
-      stopoverDurationHours > 48 & stopoverDurationHours <= 72  ~ "stopover_48_72",
-      stopoverDurationHours > 72 & stopoverDurationHours <= 96  ~ "stopover_72_96",
-      stopoverDurationHours > 96 & stopoverDurationHours <= 168 ~ "stopover_96_168",
-      stopoverDurationHours > 168                 ~ "stopover_over_168",
-      TRUE                                        ~ "stopover_unknown"
-    )
-  ) %>%
-  
   # Group by station connections species, and season
   group_by(stationID,
            previousStationID,
@@ -240,7 +190,7 @@ station_pairs_summary <- summary_coords %>%
            lat_previous,
            lon_previous) %>%
   
-  # Aggregate tracking and stopover metrics for this specific link
+  # Aggregate tracking and stopover metrics for the pair
   summarise(
     stationName = first(stationName),
     previousStationName = first(previousStationName),
@@ -251,16 +201,6 @@ station_pairs_summary <- summary_coords %>%
     min_year = min(c(year_start, year_end)),
     max_year = max(c(year_start, year_end)),
     
-    # Stopover duration breakdowns upon arrival at the current station
-    stopover_0        = sum(stopover_bin == "stopover_0"),
-    stopover_under_1  = sum(stopover_bin == "stopover_under_1"),
-    stopover_1_12    = sum(stopover_bin == "stopover_1_12"),
-    stopover_12_24    = sum(stopover_bin == "stopover_12_24"),
-    stopover_24_48   = sum(stopover_bin == "stopover_24_48"),
-    stopover_48_72   = sum(stopover_bin == "stopover_48_72"),
-    stopover_72_96    = sum(stopover_bin == "stopover_72_96"),
-    stopover_96_168   = sum(stopover_bin == "stopover_96_168"),
-    stopover_over_168 = sum(stopover_bin == "stopover_over_168"),
     
     .groups = "drop"
   ) %>%
@@ -280,6 +220,51 @@ station_pairs_summary
 write.csv(station_pairs_summary, "station_pairs_summary.csv")
 
 
+#===================================================================
+# data organization for observation level
+# ==================================================================
 
+data_obs <- summary_coords %>%
+  #Classify migration periods and seasons based on tsStart_dt
+  mutate(
+    #using month and day as a number (MMDD)
+    md = as.numeric(format(tsStart_dt, "%m%d")),
+    season = case_when(
+      md >= 0415 & md < 0615  ~ "Spring Migration", #mid April to mid June
+      md >= 0615 & md < 0815  ~ "Summer", #mid april to mid August
+      md >= 0815 & md < 1115  ~ "Fall Migration", #mid Aug to mid Nov
+      TRUE                     ~ "Winter" # mid-Nov to mid-Apr 
+    ))
+
+## adding columns for sunrise and sunset, and movement duration
+
+library(suntools)
+
+data_obs <- data_obs %>%
+  mutate(
+    movement_duration_hours = as.numeric(difftime(tsEnd_dt, 
+                                                  tsStart_dt, 
+                                                  units = "hours")),
+    # Calculate sunrise and sunset in UTC
+    sunrise_utc = sunriset(cbind(lon, lat), 
+                           tsStart_dt, 
+                           direction = "sunrise", 
+                           POSIXct.out = TRUE)$time,
+    sunset_utc  = sunriset(cbind(lon, lat), 
+                           tsStart_dt, 
+                           direction = "sunset", 
+                           POSIXct.out = TRUE)$time,
+    
+    #Convert to  Eastern Time so they make  sense
+    sunrise_local = with_tz(sunrise_utc, tzone = "America/Toronto"),
+    sunset_local  = with_tz(sunset_utc, tzone = "America/Toronto")
+  )
+    
+write.csv(data_obs, "observationSummary.csv")
+
+#saving a file for species natural history to be uses as lookup
+
+speciesList <- unique(data_obs$species)
+write.csv (speciesList, "data_obs_speciesList.csv")
 
 
