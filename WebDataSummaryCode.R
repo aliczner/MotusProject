@@ -25,7 +25,9 @@ data_inactive <- data_inactive %>%
 
 #join active and inactive stations together
 
-data_raw <- bind_rows(data_active, data_inactive)
+data_raw <- bind_rows(data_active, data_inactive) %>%
+  select(-tagFrequency) %>%  # some rows have it some do not
+  distinct() 
 
 # Format the date columns using lubridate functions
 data_cleaned <- data_raw %>%
@@ -51,14 +53,27 @@ readr::write_csv(stationsJSON$results, "StationsJSON.csv")
 #getting coordinates from stationsJSON to make a lookup table for 
 # previous tower coordinates
 id_coords_lookup <- stationsJSON$results %>% 
-  select(stationID, latitude, longitude) %>% 
+  select(stationID, 
+         latitude, 
+         longitude) %>% 
   filter(!is.na(latitude) & !is.na(longitude)) %>% 
-  distinct(stationID, .keep_all = TRUE)
+  # Convert stationID to integer
+  mutate(stationID = as.integer(stationID)) %>% 
+  # Group by ID and take the first coordinate 
+  group_by(stationID) %>% 
+  summarise(
+    latitude = first(latitude),
+    longitude = first(longitude),
+    .groups = "drop"
+  )
 
-# Add previous tower coordinates using the ID columns
+# Add previous station coordinates using the ID columns
 summary_coords <- data_cleaned %>% 
-  # convert to integer, from character
-  mutate(previousStationID = as.integer(previousStationID)) %>% 
+  # Convert both ID columns to integers
+  mutate(
+    previousStationID = as.integer(previousStationID),
+    stationID         = as.integer(stationID)
+  ) %>% 
   
   # Join the lookup table to the previousStationID column
   left_join(
@@ -66,12 +81,11 @@ summary_coords <- data_cleaned %>%
     by = c("previousStationID" = "stationID")
   ) %>% 
   
-  # Rename the new columns oordinates
+  # Rename the new columns coordinates
   rename(
     lat_previous = latitude,
     lon_previous = longitude
   )
-
 #===================================================================
 # data cleaning and binning by time periods for station overview
 # ==================================================================
@@ -266,5 +280,282 @@ write.csv(data_obs, "observationSummary.csv")
 
 speciesList <- unique(data_obs$species)
 write.csv (speciesList, "data_obs_speciesList.csv")
+
+
+station_pairs <- read.csv("observationSummary.csv") #53515 obs
+str(station_pairs)
+
+#====================================================================
+# station pair filtering column creation for later filtering
+#===================================================================
+
+#filter out same station pairs and station unknown
+
+filtered_pairs <- station_pairs %>% 
+  filter(
+    previousStationID != stationID,
+    previousStationName != "Unknown",
+    previousStationName != "Unknown station"
+  )
+#55285 obs
+
+#loading great lakes watershed polygon, contains subbasins for each lake
+GLWatershed <- st_read("./greatlakes_subbasins/greatlakes_subbasins.shp")
+#checking CRS
+st_crs(GLWatershed) #ESPG 6269
+
+#transform both the polygon and station pairs to lambert conformal conic
+
+#need to run current and previous stations separate;y
+current_sf <- st_as_sf(filtered_pairs, 
+                       coords = c("lon", "lat"), 
+                       crs = 4326) %>%
+  st_transform(crs = 3348)
+
+previous_sf <- st_as_sf(filtered_pairs, 
+                        coords = c("lon_previous", "lat_previous"), 
+                        crs = 4326) %>%
+  st_transform(crs = 3348)
+
+GLWS_proj <- st_transform(GLWatershed, crs = 3348)
+
+# check if either of the stations are within the GL watershed, 
+filtered_pairs$current_in_GLWS  <- lengths(st_intersects(current_sf, 
+                                                         GLWS_proj)) > 0
+filtered_pairs$previous_in_GLWS <- lengths(st_intersects(previous_sf, 
+                                                         GLWS_proj)) > 0
+
+# calculate distance between points
+filtered_pairs$distance_km <- as.numeric(st_distance(current_sf, 
+                                                     previous_sf, 
+                                                     by_element = TRUE)
+) / 1000 #convert to km
+
+# Mark TRUE if distance is 30 - 965 km, otherwise
+#FALSE_LESS if distance is less than 30 km 
+# FALSE_MORE if distance is more than 965 km
+
+filtered_pairs$valid_distance <- ifelse(filtered_pairs$distance_km < 30, 
+                                        "FALSE_LESS",
+                                        ifelse(filtered_pairs$distance_km > 965, 
+                                               "FALSE_MORE", 
+                                               "TRUE"))
+
+#==================================================================
+# station pair filtering by criteria
+#==================================================================
+
+filtered_df <- filtered_pairs %>%
+  filter(
+    # Keep if either the current OR the previous station is in GLWS
+    (current_in_GLWS | previous_in_GLWS))
+
+str(filtered_df) #27680 obs
+
+table(filtered_df$valid_distance)
+#Valid_distance
+#TRUE 11945
+#FALSE_LESS 14376
+#FALSE_MORE 1359
+
+filtered_df$flight <- ifelse(filtered_df$movement_duration_hours < 12,
+                             "flight",
+                             "incidence") 
+
+write.csv(filtered_df, "StationPairsFiltered.csv")
+
+#==================================================
+# summary data by individual
+#=================================================
+
+length(unique(filtered_df$species)) #124
+length(unique(filtered_df$tagDeployID)) #4494
+
+library(ggplot2)
+
+# Calculate the number of detections per tag
+tag_counts <- filtered_df %>% 
+  group_by(tagDeployID) %>% 
+  summarise(total_detections = n(), .groups = "drop")
+# max = 473
+# median = 3
+# mean = 6.2
+
+# Plot the histogram
+ggplot(tag_counts, aes(x = total_detections)) +
+  geom_histogram(binwidth = 5, fill = "purple4", color = "white") +
+  labs(
+    title = "Distribution of Detections per Tag",
+    x = "Number of Detections",
+    y = "Count of Tags"
+  ) +
+  theme_minimal()
+
+#zoomed in histogram without such a long tail
+ggplot(tag_counts, aes(x = total_detections)) +
+  geom_histogram(binwidth = 5, 
+                 boundary = 0, 
+                 fill = "purple4", 
+                 colour = "white") +
+  coord_cartesian(xlim = c(1, 50)) + #zooms in
+  labs(
+    title = "Distribution of Detections per Tag",
+    x = "Number of Detections",
+    y = "Count of Tags"
+  ) +
+  theme_minimal()
+
+#====================================================================
+# checking for, and counting duplicate tsStart/End
+#====================================================================
+
+# adding in a buffer for potential processing lag between stations
+buffer_seconds <- 3
+
+duplicate_counts <- filtered_df %>%
+#sort by tagID and date so that observations are chronological
+  arrange(tagDeployID, tsStart_dt) %>%
+  group_by(tagDeployID) %>%
+  
+  # calculating time difference within row and across rows (next step in flight)
+  mutate(
+    # within row time difference 
+    within_row = as.numeric(difftime(tsEnd_dt, 
+                                     tsStart_dt, 
+                                     units = "secs")),
+    
+    # across row time difference
+    cross_row = as.numeric(difftime(lag(tsEnd_dt), 
+                                    tsStart_dt, 
+                                    units = "secs"))
+  ) %>%
+  ungroup() %>%
+  
+  # 
+  #count the occurrences
+  summarise(
+    total_rows_in_dataset = n(),
+    
+    # Flag 1: Start and end are the same (tsStart = tsEnd)
+    Flag_1_duration = sum(within_row >= 0 & within_row <= buffer_seconds,
+                          na.rm = TRUE),
+    
+    # Flag 2: Current row starts before the last row ended 
+    Flag_2_duration = sum(cross_row> -buffer_seconds,
+                          na.rm = TRUE)
+  )
+
+duplicate_counts 
+#  total_rows_in_dataset Flag_1_duration Flag_2_duration
+#               27680              26           1774
+
+
+# adding a column that classifies the detections by flags
+# stationDuplicateFlag:
+  # none means no issues
+  # flag 1 the start and end time are zero
+  # flag 2 multiple towers detected at once, differing start times between rows
+
+filtered_df <- filtered_df %>%
+  arrange(tagDeployID, tsStart_dt) %>%
+  group_by(tagDeployID) %>%
+  mutate(
+    stationDuplicateFlag = case_when(
+      # Label flag 1
+      as.numeric(difftime(tsEnd_dt, 
+                          tsStart_dt, 
+                          units = "secs")) >= 0 & 
+        as.numeric(difftime(tsEnd_dt, 
+                            tsStart_dt, 
+                            units = "secs")) <= buffer_seconds ~ "flag_1",
+      
+      # Label flag 2
+      as.numeric(difftime(lag(tsEnd_dt), 
+                          tsStart_dt, 
+                          units = "secs")) > -buffer_seconds ~ "flag_2",
+      
+      # Label everything else
+      TRUE ~ "none"
+    )
+  ) %>%
+  ungroup()
+
+filtered_df
+
+#=====================================================================
+# creating flight paths
+# ====================================================================
+
+library(dplyr)
+library(tidyr)
+library(lubridate)
+
+prepared_df <- filtered_df %>% 
+  arrange(tagDeployID, tsStart_dt) %>%
+  group_by(tagDeployID) %>%
+  mutate( #calculate the lag time between steps in hours
+    step_gap = as.numeric(difftime(tsStart_dt, 
+                                   lag(tsEnd_dt), 
+                                   units = "hours")),
+    #order can get messy for stations within range ending up with negative
+    #values. converting these to zero
+    step_gap = ifelse(step_gap < 0, 0, step_gap),
+    #classify as separate flight if lag time is > 12 hrs
+    new_flight = is.na(step_gap) | (step_gap) > 12,
+    #numbering the flights
+    flight_ID = paste0("Flight_", cumsum(new_flight))
+  ) %>%
+  ungroup() %>%
+  select(
+    tagDeployID, flight_ID, season, species, 
+    stationID, stationName, lon, lat, 
+    previousStationID, previousStationName, lon_previous, lat_previous, 
+    tsStart_dt, tsEnd_dt, movement_duration_hours, distance_km, 
+    sunrise_local, sunset_local
+  )
+
+#now split into nested list
+flights_list <- prepared_df %>% 
+  # Split the data into a list by tagID
+  split(.$tagDeployID) %>% 
+  
+  # loop through each tag and split by Flight ID
+  lapply(function(individual_df) {
+    split(individual_df, individual_df$flight_ID)
+  })
+
+str(flights_list, max.level = 2) #set to level 2 to see just tag and flight list
+#======================================================================
+# creating a map of the points
+#======================================================================
+
+library(sf)
+library(mapview)
+
+#separate out spring migration
+
+spring <- subset(filtered_df, season == "Spring Migration") 
+#2910 obs
+
+current_map_GLWS <- st_as_sf(spring, 
+                             coords = c("lon", "lat"), 
+                             crs = 4326) %>% 
+  st_transform(crs = 3348)
+
+prev_map_GLWS <- st_as_sf(spring, 
+                          coords = c("lon_previous", "lat_previous"), 
+                          crs = 4326) %>% 
+  st_transform(crs = 3348)
+
+mapview(GLWS_proj, 
+        col.regions = "gray", 
+        alpha.regions = 0.3, 
+        layer.name = "GLWS") +
+  mapview(current_map_GLWS, 
+          col.regions = "blue", 
+          layer.name = "Current Station") +
+  mapview(prev_map_GLWS, 
+          col.regions = "orange",
+          layer.name = "Previous Station")
 
 
