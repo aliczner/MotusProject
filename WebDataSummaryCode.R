@@ -423,37 +423,36 @@ duplicate_counts <- filtered_df %>%
     within_row = as.numeric(difftime(tsEnd_dt, 
                                      tsStart_dt, 
                                      units = "secs")),
-    
-    # across row time difference
-    cross_row = as.numeric(difftime(lag(tsEnd_dt), 
+    # across row time difference behind
+    cross_row_lag = as.numeric(difftime(lag(tsEnd_dt), 
                                     tsStart_dt, 
-                                    units = "secs"))
+                                    units = "secs")),
+    #across row time difference forward to ensure all pairs are flagged
+    cross_row_lead = as.numeric(difftime(tsEnd_dt, 
+                                         lead(tsStart_dt), 
+                                         units = "secs"))
   ) %>%
   ungroup() %>%
   
-  # 
-  #count the occurrences
+  # Count the occurrences
   summarise(
     total_rows_in_dataset = n(),
-    
-    # Flag 1: Start and end are the same (tsStart = tsEnd)
+    # Flag 1: Start and end are the same
     Flag_1_duration = sum(within_row >= 0 & within_row <= buffer_seconds,
                           na.rm = TRUE),
-    
-    # Flag 2: Current row starts before the last row ended 
-    Flag_2_duration = sum(cross_row> -buffer_seconds,
+    # Flag 2: Overlaps with the previous row OR overlaps with the next row
+    Flag_2_duration = sum(cross_row_lag > -buffer_seconds | cross_row_lead > -buffer_seconds,
                           na.rm = TRUE)
   )
-
 duplicate_counts 
 #  total_rows_in_dataset Flag_1_duration Flag_2_duration
-#               27680              26           1774
+#               27680              26           3548
 
 
 # adding a column that classifies the detections by flags
 # stationDuplicateFlag:
   # none means no issues
-  # flag 1 the start and end time are zero
+  # flag 1 the start and end time are the same
   # flag 2 multiple towers detected at once, differing start times between rows
 
 filtered_df <- filtered_df %>%
@@ -468,19 +467,141 @@ filtered_df <- filtered_df %>%
         as.numeric(difftime(tsEnd_dt, 
                             tsStart_dt, 
                             units = "secs")) <= buffer_seconds ~ "flag_1",
-      
       # Label flag 2
       as.numeric(difftime(lag(tsEnd_dt), 
                           tsStart_dt, 
-                          units = "secs")) > -buffer_seconds ~ "flag_2",
+                          units = "secs")) > -buffer_seconds |
+        as.numeric(difftime(tsEnd_dt, 
+                            lead(tsStart_dt), 
+                            units = "secs")) > -buffer_seconds ~ "flag_2",
       
       # Label everything else
       TRUE ~ "none"
+    ),
+      rolling_max_end = accumulate(as.POSIXct(tsEnd_dt),
+                                   pmax),
+      
+      # If a row's start time is > rolling max end time of all previous rows, 
+      # it is a clean break
+      new_event_break = as.POSIXct(tsStart_dt) > lag(rolling_max_end),
+      
+      # Replace initial NA from the lag step with FALSE
+      new_event_break = ifelse(is.na(new_event_break), 
+                               FALSE,
+                               new_event_break),
+      
+      # Summing the breaks to give a unique cluster ID
+      eventClusterID = cumsum(new_event_break) + 1
+    ) %>%
+      ungroup() %>%
+      
+      select(-rolling_max_end, -new_event_break) #remove temp columns
+
+head(filtered_df)
+
+write.csv(filtered_df, "StationPairsFiltered.csv")
+
+
+#=================================================================
+# to fix flag_1s
+#=================================================================
+
+library(geosphere)
+
+# Update flag_1 rows and calculate the midpoint
+df_with_midpoints <- filtered_df %>%
+  mutate(
+    # Create the matrix inputs for the geosphere function
+    p1 = cbind(lon, lat),
+    p2 = cbind(lon_previous, lat_previous),
+    
+    # Calculate the true great-circle midpoint
+    mid_coords = geosphere::midPoint(p1, p2),
+    
+    # Update current lat/lon and station name ONLY for flag_1 rows
+    lon = if_else(stationDuplicateFlag == "flag_1", 
+                  mid_coords[, 1], 
+                  lon),
+    lat = if_else(stationDuplicateFlag == "flag_1", 
+                  mid_coords[, 2], 
+                  lat),
+    stationName = if_else(stationDuplicateFlag == "flag_1", 
+                          paste0(previousStationName, " & ", stationName), 
+                          stationName)
+  ) %>% 
+  select(-p1, -p2, -mid_coords)
+
+# remove the flag_1 row from the path
+final_cleaned_df <- df_with_midpoints %>%
+  arrange(tagDeployID, tsStart_dt) %>%
+  group_by(tagDeployID) %>%
+  mutate(
+    # Check if the row above was a flag_1 row 
+    follows_flag1 = lag(stationDuplicateFlag == "flag_1",
+                        default = FALSE),
+    
+    # If row follows a flag_1, add midpoint details
+    previousStationName = case_when(
+      follows_flag1 == TRUE ~ lag(stationName),
+      TRUE                  ~ previousStationName
+    ),
+    previousStationID = case_when(
+      follows_flag1 == TRUE ~ lag(stationID),
+      TRUE                  ~ previousStationID
+    ),
+    lon_previous = case_when(
+      follows_flag1 == TRUE ~ lag(lon),
+      TRUE                  ~ lon_previous
+    ),
+    lat_previous = case_when(
+      follows_flag1 == TRUE ~ lag(lat),
+      TRUE                  ~ lat_previous
+    ),
+    
+    #rename from flag_1 to flag_1_resolved
+    stationDuplicateFlag = case_when(
+      follows_flag1 == TRUE ~ "flag_1_resolved",
+      TRUE                  ~ stationDuplicateFlag
     )
   ) %>%
+  # drop the flag_1 rows 
+  filter(stationDuplicateFlag != "flag_1") %>%
+  
+  # Recalculate distances with midpoints
+  mutate(
+    distance_km = case_when(
+      follows_flag1 == TRUE ~ geosphere::distHaversine(cbind(lon_previous, 
+                                                             lat_previous), 
+                                                       cbind(lon, lat)) / 1000,
+      TRUE                  ~ distance_km
+    )
+  ) %>%
+  select(-follows_flag1) %>% # drops temporary columns
   ungroup()
 
-filtered_df
+#===========================================
+# fix flag 2s
+#===========================================
+
+# all flag_2s have two events
+# one event is a glitch (going back in time, the other is true)
+
+# Keep only the forward-moving data
+cleaned_df <- final_cleaned_df %>%
+  filter(
+    # If it's a flag_2, keep it if it moves forward/synchronously in time
+    (stationDuplicateFlag == "flag_2" & tsStart_dt <= tsEnd_dt) |
+      
+      # Keep all other rows 
+      (stationDuplicateFlag != "flag_2")
+  )
+
+
+write.csv(cleaned_df, "StationPairsFiltered.csv") 
+
+#===============================================================
+# adding additional flight information
+#===============================================================
 
 #=====================================================================
 # creating flight paths
