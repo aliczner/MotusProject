@@ -7,6 +7,7 @@ library(purrr)
 library(stringr)
 library(readr)
 library(tidyr)
+library(purrr)
 
 Sys.setenv(TZ = "UTC") 
 
@@ -454,12 +455,16 @@ duplicate_counts
   # none means no issues
   # flag 1 the start and end time are the same
   # flag 2 multiple towers detected at once, differing start times between rows
+  # flag 3 mismatched run where it ends before its start time. 
 
 filtered_df <- filtered_df %>%
   arrange(tagDeployID, tsStart_dt) %>%
   group_by(tagDeployID) %>%
   mutate(
     stationDuplicateFlag = case_when(
+      #label flag 3, figured this one exists after naming others, but it needs
+      #to be coded first
+      as.POSIXct(tsEnd_dt) < as.POSIXct(tsStart_dt) ~ "flag_3",
       # Label flag 1
       as.numeric(difftime(tsEnd_dt, 
                           tsStart_dt, 
@@ -560,8 +565,8 @@ final_cleaned_df <- df_with_midpoints %>%
     
     #rename from flag_1 to flag_1_resolved
     stationDuplicateFlag = case_when(
-      follows_flag1 == TRUE ~ "flag_1_resolved",
-      TRUE                  ~ stationDuplicateFlag
+      follows_flag1 == TRUE & stationDuplicateFlag == "none" ~ "flag_1_resolved",
+      TRUE                                                   ~ stationDuplicateFlag
     )
   ) %>%
   # drop the flag_1 rows 
@@ -580,20 +585,17 @@ final_cleaned_df <- df_with_midpoints %>%
   ungroup()
 
 #===========================================
-# fix flag 2s
+# fix flag 2s and 3s
 #===========================================
 
-# all flag_2s have two events
-# one event is a glitch (going back in time, the other is true)
-
-# Keep only the forward-moving data
 cleaned_df <- final_cleaned_df %>%
   filter(
-    # If it's a flag_2, keep it if it moves forward/synchronously in time
+    # For flag_2, only keep the row if it moves forward in time
     (stationDuplicateFlag == "flag_2" & tsStart_dt <= tsEnd_dt) |
       
-      # Keep all other rows 
-      (stationDuplicateFlag != "flag_2")
+      # For flag_3, drop them
+      # Keep all other rows (none, flag_1_resolved, etc.) unconditionally
+      (stationDuplicateFlag != "flag_2" & stationDuplicateFlag != "flag_3")
   )
 
 
@@ -602,6 +604,79 @@ write.csv(cleaned_df, "StationPairsFiltered.csv")
 #===============================================================
 # adding additional flight information
 #===============================================================
+
+flightInfo_df <- cleaned_df %>%
+  # sort by individual and in chronological order
+  arrange(tagDeployID, tsStart_dt) %>%
+  group_by(tagDeployID) %>%
+  mutate(
+      # Mark a TRUE every time a new flight starts (first row or > 12 hrs)
+      new_flight = row_number() == 1 | movement_duration_hours > 12,
+      
+      # add flight number per individual
+      flight_number = cumsum(new_flight),
+      
+      # Create the unique text identifier needed for splitting/nesting later
+      flight_ID = paste0("Flight_", flight_number)
+    ) %>%
+  # Regroup by animal AND flight number for step and angle math
+  group_by(tagDeployID, 
+           flight_number) %>%
+  mutate(
+    # Speed of each step in a flight (km divided by travel duration hours)
+    # Using if_else to prevent division-by-zero errors if duration is 0
+    step_speed_kmh = if_else(travelDurationHours > 0, 
+                             distance_km / travelDurationHours, 
+                             0),
+    
+    # Turning angle of each step
+    # calculate absolute headings for current step
+    current_bearing = geosphere::bearing(cbind(lon_previous, lat_previous), 
+                                         cbind(lon, lat)),
+    # Look at the bearing of the next step within the same flight path
+    next_bearing = lead(current_bearing),
+    
+    # Calculate the change in direction (-180 to +180 degrees)
+    turning_angle = next_bearing - current_bearing,
+    turning_angle = (turning_angle + 180) %% 360 - 180
+  ) %>%
+  ungroup() %>%
+  
+  mutate(
+    # Convert character columns to formal date-time objects
+    tsStart_posix   = ymd_hms(tsStart_dt),
+    sunrise_posix   = ymd_hms(sunrise_local),
+    sunset_posix    = ymd_hms(sunset_local),
+    
+    # Add a column for whether the flight was during daylight or at night
+    diel_period = if_else(tsStart_posix >= sunrise_posix & tsStart_posix <= sunset_posix, 
+                          "daylight", 
+                          "night"),
+    
+    # Calculate  hour gaps from twilight transitions
+    hours_from_sunset  = as.numeric(abs(difftime(tsStart_posix, 
+                                                 sunset_posix, 
+                                                 units = "hours"))),
+    hours_from_sunrise = as.numeric(abs(difftime(tsStart_posix, 
+                                                 sunrise_posix, 
+                                                 units = "hours"))),
+    
+    # Add nearSun column based on the 1-hour window proximity
+    nearSun = case_when(
+      hours_from_sunset <= 1  ~ "sunset",
+      hours_from_sunrise <= 1 ~ "sunrise",
+      TRUE                    ~ "none"
+    )
+  ) %>%
+  # Clean up temporary helper columns to keep the data tidy
+  select(-current_bearing, 
+         -next_bearing,
+         -tsStart_posix, 
+         -sunrise_posix, 
+         -sunset_posix, 
+         -hours_from_sunset,
+         -hours_from_sunrise)
+
 
 #=====================================================================
 # creating flight paths
