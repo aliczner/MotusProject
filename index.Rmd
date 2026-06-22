@@ -1,0 +1,101 @@
+---
+title: "Station Summary Data"
+author: "Amanda Liczner"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+library(motus)
+library(lubridate)
+library(dplyr)
+library(purrr)
+library(stringr)
+library(readr)
+library(tidyr)
+library(purrr)
+
+Sys.setenv(TZ = "UTC") 
+
+```
+
+Overview of the data from Motus Project #1 summary data (downloaded off the web). 
+
+### Data preparation summary
+The summary data was downloaded from all Motus Project #1 towers.
+The data are downloaded as "pairs" with the current and previous station noted
+
+The downloaded data included the following headings:
+```{r echo=FALSE}
+data_active <- read.csv("./StationDownloads/Motus-data-project-1_detections_downloaded-2026-06-03.csv")
+#at first just did active towers to prevent crashing
+data_inactive <- read.csv ("./StationDownloads/Motus-data-multiple-stations_detections_downloaded-2026-06-09.csv")
+
+#the inactive data had frequency as num, convert so it matches
+data_inactive <- data_inactive %>%  
+  mutate(tagFrequency = as.character(tagFrequency))
+
+#join active and inactive stations together
+
+data_raw <- bind_rows(data_active, data_inactive) %>%
+  select(-tagFrequency) %>%  # some rows have it some do not
+  distinct()
+head(data_raw)
+```
+Additional columns were added such as:
+
+- calculated my own movement_duration_hous, traveDurationHours is from the download
+- calculated my own distance_km, travelDistanceKMs is from the download
+- added in a column for season
+  - spring = April 15 - June 15
+  - summer = June 15 - August 18
+  - fall = August 15 - November 15
+  - Winter = November 15- April 15
+- sunrise_utc/sunset_utc: the timing of sunrise/sunset in UTC
+- sunrise_local/sunset_local: the timing of sunrise/Sunset in Eastern Time
+- current_in_GLWS/previous_in_GLWS: if the station (current or previous) is within the Great Lakes Watershed
+- distance_km: the distance between the two stations
+- valid_distance: 
+  - FALSE_LESS = the distance between stations is less than 30 km
+  - FALSE_MORE = the distance between stations is more than 965 km 
+  - TRUE = the distance between stations is between 30 - 965 km
+- flight:
+  flight = when the detection between stations is < 12 hrs
+  incidence = when the detection between stations is > 12 hrs
+- stationDuplicateFlag: flags detection issues (note buffer of 3 seconds was used to account for potential delays in detection and processing time at stations)
+  - flag_1 = the start and end time are the same
+  - flag_2 multiple towers detected at once, differing start times between rows going back in time
+  - flag_3 mismatched run where it ends before its start time. 
+  - flag_1_resolved = where flag_1 issues were corrected 
+- eventClusterID = unique identifier assigned to a group of overlapping or continuous tracking events for a specific individual, created while tracking flagged errors
+- new_flight = to identify the start of a new flight, used while tracking flagged errrors, a new flight is when the movement duration is > 12 hrs
+- flight_number: a sequential numbering of flights for that individual
+- flight_ID: adds "Flight_" to the flight number (from flight_number)
+- step_speed_kmh: the speed in km/h at that flight step
+- turning_angle: the turning angle calculated, where possible (=> detections needed)
+- diel_period: whether the flight is occuring at night or during daylight
+- nearSun: whether the flight occured within one hour of sunrrise/sunset
+  - sunrise = the flight occurred within one hour of sunrise
+  - sunset = the flight occurred within on hour of sunset
+  - none = the flight did not occur within one hour of sunrise or sunset. 
+
+
+
+
+Data cleaning: 
+- Detections at the same current and previous station were removed as we are focusing on flights
+
+
+```{r }
+flightInfo_df <- read.csv("StationPairsFiltered.csv")
+str(flightInfo_df)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
