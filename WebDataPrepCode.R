@@ -677,7 +677,9 @@ flightInfo_df <- cleaned_df %>%
          -hours_from_sunset,
          -hours_from_sunrise)
 
+names(flightInfo_df)
 
+write.csv(flightInfo_df, "StationPairsFiltered.csv", row.names = FALSE)
 #=====================================================================
 # creating flight paths
 # ====================================================================
