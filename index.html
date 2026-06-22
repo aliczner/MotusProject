@@ -397,7 +397,60 @@ noted</p>
 the download</li>
 <li>calculated my own distance_km, travelDistanceKMs is from the
 download</li>
-<li>added in a column for season</li>
+<li>added in a column for season
+<ul>
+<li>spring = April 15 - June 15</li>
+<li>summer = June 15 - August 18</li>
+<li>fall = August 15 - November 15</li>
+<li>Winter = November 15- April 15</li>
+</ul></li>
+<li>sunrise_utc/sunset_utc: the timing of sunrise/sunset in UTC</li>
+<li>sunrise_local/sunset_local: the timing of sunrise/Sunset in Eastern
+Time</li>
+<li>current_in_GLWS/previous_in_GLWS: if the station (current or
+previous) is within the Great Lakes Watershed</li>
+<li>distance_km: the distance between the two stations</li>
+<li>valid_distance:
+<ul>
+<li>FALSE_LESS = the distance between stations is less than 30 km</li>
+<li>FALSE_MORE = the distance between stations is more than 965 km</li>
+<li>TRUE = the distance between stations is between 30 - 965 km</li>
+</ul></li>
+<li>flight: flight = when the detection between stations is &lt; 12 hrs
+incidence = when the detection between stations is &gt; 12 hrs</li>
+<li>stationDuplicateFlag: flags detection issues (note buffer of 3
+seconds was used to account for potential delays in detection and
+processing time at stations)
+<ul>
+<li>flag_1 = the start and end time are the same</li>
+<li>flag_2 multiple towers detected at once, differing start times
+between rows going back in time</li>
+<li>flag_3 mismatched run where it ends before its start time.</li>
+<li>flag_1_resolved = where flag_1 issues were corrected</li>
+</ul></li>
+<li>eventClusterID = unique identifier assigned to a group of
+overlapping or continuous tracking events for a specific individual,
+created while tracking flagged errors</li>
+<li>new_flight = to identify the start of a new flight, used while
+tracking flagged errrors, a new flight is when the movement duration is
+&gt; 12 hrs</li>
+<li>flight_number: a sequential numbering of flights for that
+individual</li>
+<li>flight_ID: adds “Flight_” to the flight number (from
+flight_number)</li>
+<li>step_speed_kmh: the speed in km/h at that flight step</li>
+<li>turning_angle: the turning angle calculated, where possible (=&gt;
+detections needed)</li>
+<li>diel_period: whether the flight is occuring at night or during
+daylight</li>
+<li>nearSun: whether the flight occured within one hour of
+sunrrise/sunset
+<ul>
+<li>sunrise = the flight occurred within one hour of sunrise</li>
+<li>sunset = the flight occurred within on hour of sunset</li>
+<li>none = the flight did not occur within one hour of sunrise or
+sunset.</li>
+</ul></li>
 </ul>
 <p>Data cleaning: - Detections at the same current and previous station
 were removed as we are focusing on flights</p>

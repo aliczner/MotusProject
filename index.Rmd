@@ -13,6 +13,7 @@ library(stringr)
 library(readr)
 library(tidyr)
 library(purrr)
+library(sf)
 
 Sys.setenv(TZ = "UTC") 
 
@@ -39,9 +40,9 @@ data_inactive <- data_inactive %>%
 data_raw <- bind_rows(data_active, data_inactive) %>%
   select(-tagFrequency) %>%  # some rows have it some do not
   distinct()
-head(data_raw)
+str(data_raw)
 ```
-Additional columns were added such as:
+**Additional columns were added:**
 
 - calculated my own movement_duration_hous, traveDurationHours is from the download
 - calculated my own distance_km, travelDistanceKMs is from the download
@@ -78,11 +79,101 @@ Additional columns were added such as:
   - sunset = the flight occurred within on hour of sunset
   - none = the flight did not occur within one hour of sunrise or sunset. 
 
+**Data removed:** 
 
-
-
-Data cleaning: 
 - Detections at the same current and previous station were removed as we are focusing on flights
+- If the previous station name is unknown, the detection was removed
+
+```{r echo=FALSE}
+station_pairs <- read.csv("observationSummary.csv")
+filtered_pairs <- station_pairs %>% 
+  filter(
+    previousStationID != stationID,
+    previousStationName != "Unknown",
+    previousStationName != "Unknown station"
+  )
+cat("The number of detections before removals:", 
+    nrow(station_pairs), "\n")
+
+cat("The number of detections after removing same station and unknown stations:", 
+    nrow(filtered_pairs), "\n")
+cat("The number of detections removed:", (nrow(station_pairs)- nrow(filtered_pairs)))
+```
+- Only kept station pairs where at least one station (either current or previous) was within the Great Lakes Watershed
+
+``` {r echo=FALSE}
+#loading great lakes watershed polygon, contains subbasins for each lake
+GLWatershed <- st_read("./greatlakes_subbasins/greatlakes_subbasins.shp")
+
+#transform both the polygon and station pairs to lambert conformal conic
+
+#need to run current and previous stations separate;y
+current_sf <- st_as_sf(filtered_pairs, 
+                       coords = c("lon", "lat"), 
+                       crs = 4326) %>%
+  st_transform(crs = 3348)
+
+previous_sf <- st_as_sf(filtered_pairs, 
+                        coords = c("lon_previous", "lat_previous"), 
+                        crs = 4326) %>%
+  st_transform(crs = 3348)
+
+GLWS_proj <- st_transform(GLWatershed, crs = 3348)
+
+# check if either of the stations are within the GL watershed, 
+filtered_pairs$current_in_GLWS  <- lengths(st_intersects(current_sf, 
+                                                         GLWS_proj)) > 0
+filtered_pairs$previous_in_GLWS <- lengths(st_intersects(previous_sf, 
+                                                         GLWS_proj)) > 0
+
+# calculate distance between points
+filtered_pairs$distance_km <- as.numeric(st_distance(current_sf, 
+                                                     previous_sf, 
+                                                     by_element = TRUE)
+) / 1000 #convert to km
+
+filtered_pairs$valid_distance <- ifelse(filtered_pairs$distance_km < 30, 
+                                        "FALSE_LESS",
+                                        ifelse(filtered_pairs$distance_km > 965, 
+                                               "FALSE_MORE", 
+                                               "TRUE"))
+
+filtered_df <- filtered_pairs %>%
+  filter(
+    # Keep if either the current OR the previous station is in GLWS
+    (current_in_GLWS | previous_in_GLWS))
+cat("The number of detections after removing those not in the Great Lakes Watershed:",
+    nrow(filtered_df))
+cat("The number of detections removed:", 
+    (nrow(filtered_pairs)-nrow(filtered_df)))
+
+```
+- detections under Flag_2 that have mismatched end times, and all Flag_3s were removed
+
+### Correcting station flag issues
+
+**Flag 1, the same start and end time between two different towers**
+There were 26 detections with Flag_1
+
+Detections under this flag occurred when two stations (confirmed it was only ever 2 stations) picked up the same individual was in range of two stations. 
+To fix this issue, the midpoint of the two stations was calculated. This location became the new coordinates for the current station. The current station name was replaced with a combination of both station names separated by "_". The previous station of the next detection was renamed with the combined name. These corrections were flagged as "flag_1_resolved"
+
+**Flag 2, multiple towers detected the individual once, differing start times between rows going back in time**
+
+There were 1774 detections with Flag_2
+
+Detections under this flag occurred when stations that are close together were picking up the same individual simultaneously and this looks like it resulted in a processing error where the detection was recorded twice (identical on 2 rows) _except_ once row would have the end time as earlier than the start time. 
+
+To fix this error, I removed the duplicate row with the incorrect end time
+
+**Flag 3, mismatched run where it ends before its start time**
+
+There were 5527 detections with Flag_3
+
+Detections here are similar to Flag_2 but there isn't a duplicated row. These detections appear to be mistakes that occurred during processing where the end time is recorded as before the start time. 
+
+I could not figure out how to fix this error so these detections were removed. 
+
 
 
 ```{r }

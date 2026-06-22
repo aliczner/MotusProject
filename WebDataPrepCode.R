@@ -298,7 +298,8 @@ filtered_pairs <- station_pairs %>%
     previousStationName != "Unknown",
     previousStationName != "Unknown station"
   )
-#55285 obs
+str(filtered_pairs)
+#37084 obs
 
 #loading great lakes watershed polygon, contains subbasins for each lake
 GLWatershed <- st_read("./greatlakes_subbasins/greatlakes_subbasins.shp")
