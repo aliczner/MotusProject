@@ -16,18 +16,24 @@ Sys.setenv(TZ = "UTC")
 # ===============================================================
 # year range, missing years, species #, detection #, tag #
 
-data_active <- read.csv("./StationDownloads/Motus-data-project-1_detections_downloaded-2026-06-03.csv")
-#at first just did active towers to prevent crashing
-data_inactive <- read.csv ("./StationDownloads/Motus-data-multiple-stations_detections_downloaded-2026-06-09.csv")
+# downloaded data for all states/ON in GLWS but in batches
+# the full region would not download
+data_ON <- read.csv("./StationDownloads/Motus-data-region-CA-ON_detections_downloaded-2026-06-23.csv")
+data_NY <- read.csv("./StationDownloads/Motus-data-region-US-NY_detections_downloaded-2026-06-23.csv")
+data_PA <- read.csv("./StationDownloads/Motus-data-region-US-PA_detections_downloaded-2026-06-23.csv")
+data_OH <- read.csv("./StationDownloads/Motus-data-region-US-OH_detections_downloaded-2026-06-23.csv")
+data_IN <- read.csv("./StationDownloads/Motus-data-region-US-IN_detections_downloaded-2026-06-23.csv")
+data_IL <- read.csv("./StationDownloads/Motus-data-region-US-IL_detections_downloaded-2026-06-23.csv")
+data_WI <- read.csv("./StationDownloads/Motus-data-region-US-WI_detections_downloaded-2026-06-23.csv")
 
-#the inactive data had frequency as num, convert so it matches
-data_inactive <- data_inactive %>%  
-  mutate(tagFrequency = as.character(tagFrequency))
-
-#join active and inactive stations together
-
-data_raw <- bind_rows(data_active, data_inactive) %>%
-  select(-tagFrequency) %>%  # some rows have it some do not
+# join all the station data 
+data_raw <- bind_rows(data_ON,
+                      data_NY,
+                      data_PA,
+                      data_OH,
+                      data_IN,
+                      data_IL,
+                      data_WI) %>%  # some rows have it some do not
   distinct() 
 
 # Format the date columns using lubridate functions
@@ -87,156 +93,9 @@ summary_coords <- data_cleaned %>%
     lat_previous = latitude,
     lon_previous = longitude
   )
-#===================================================================
-# data cleaning and binning by time periods for station overview
-# ==================================================================
-
-station_overview <- summary_coords %>%
-#Classify migration periods and seasons based on tsStart_dt
-  mutate(
-#using month and day as a number (MMDD)
-    md = as.numeric(format(tsStart_dt, "%m%d")),
-    season = case_when(
-      md >= 0415 & md < 0615  ~ "Spring Migration", #mid April to mid June
-      md >= 0615 & md < 0815  ~ "Summer", #mid april to mid August
-      md >= 0815 & md < 1115  ~ "Fall Migration", #mid Aug to mid Nov
-      TRUE                     ~ "Winter" # mid-Nov to mid-Apr 
-    )
-  ) %>%
-
-  # Group by station and season
-  group_by(stationID, 
-           previousStationID,
-           season, 
-           lat, 
-           lon, 
-           lat_previous, 
-           lon_previous) %>%
-  summarise(
-    stationName = first(stationName), #adds station names without grouping
-    previousStationName = first(previousStationName),
-    earliest_detection_raw = min(tsStart_dt, na.rm = TRUE),
-    latest_detection_raw = max(tsEnd_dt, na.rm = TRUE),
-    
-    min_y = min(c(year_start, year_end), na.rm = TRUE),
-    max_y = max(c(year_start, year_end), na.rm = TRUE),
-    
-    years_present_list = list(unique(c(year_start, year_end))),
-    
-    number_of_species = n_distinct(species),
-    number_of_detections = n(),
-    number_of_tags = n_distinct(tagDeployID),
-    
-    .groups = "drop"
-  ) %>%
-  
-  rowwise() %>%
-  mutate(
-    earliest_detection = format(earliest_detection_raw, "%d %b %Y %H:%M:%S UTC"),
-    latest_detection   = format(latest_detection_raw, "%d %b %Y %H:%M:%S UTC"),
-    
-    year_range = if_else(min_y == max_y, 
-                         as.character(min_y), 
-                         paste(min_y, max_y, sep = "-")),
-    number_of_years = max_y - min_y,
-    
-    # Find the missing operational years in the sequence range
-    full_sequence = list(min_y:max_y),
-    missing_years_vec = list(setdiff(unlist(full_sequence), 
-                                     unlist(years_present_list))),
-    
-    # Save these explicitly as normal, flat data columns (No list nesting here!)
-    num_years_no_detection = length(unlist(missing_years_vec)),
-    years_missing_detections = if_else(
-      num_years_no_detection > 0,
-      paste(unlist(missing_years_vec), collapse = ", "),
-      ""
-    )
-  ) %>%
-  ungroup() %>%
-  select(
-    stationID,
-    previousStationID,
-    stationName, 
-    previousStationName,
-    season, 
-    earliest_detection,
-    latest_detection,
-    year_range, 
-    number_of_years, 
-    num_years_no_detection,
-    years_missing_detections,
-    number_of_species, 
-    number_of_detections, 
-    number_of_tags,
-    lat,
-    lon,
-    lat_previous,
-    lon_previous
-  )
-
-write_csv(station_overview, "combined_station_overview.csv")
-
-#======================================================================
-# station network yearly by species summary
-#=====================================================================
-#comparing which towers are most often connected for each sp and year
-
-station_pairs_summary <- summary_coords %>%
-
-  #Classify Seasons 
-  mutate(
-    md = as.numeric(format(tsStart_dt, "%m%d")),
-    season = case_when(
-      md >= 0415 & md < 0615  ~ "Spring Migration",
-      md >= 0615 & md < 0815  ~ "Summer",
-      md >= 0815 & md < 1115  ~ "Fall Migration",
-      TRUE                     ~ "Winter"
-    )
-  ) %>%
-  
-  # Group by station connections species, and season
-  group_by(stationID,
-           previousStationID,
-           species, 
-           season,
-           lat,
-           lon,
-           lat_previous,
-           lon_previous) %>%
-  
-  # Aggregate tracking and stopover metrics for the pair
-  summarise(
-    stationName = first(stationName),
-    previousStationName = first(previousStationName),
-    number_of_movements = n(),
-    number_of_individual_tags = n_distinct(tagDeployID), 
-    
-    # Year range for this specific connection
-    min_year = min(c(year_start, year_end)),
-    max_year = max(c(year_start, year_end)),
-    
-    
-    .groups = "drop"
-  ) %>%
-  
-  # Create year range text column
-  mutate(
-    years_active = if_else(min_year == max_year, 
-                           as.character(min_year), 
-                           paste(min_year, max_year, sep = "-"))
-  ) %>%
-  
-  # Order from where, to where, what species, and when
-  arrange(number_of_movements)
-
-station_pairs_summary
-
-write.csv(station_pairs_summary, "station_pairs_summary.csv")
-
 
 #===================================================================
-# data organization for observation level
+# data cleaning and binning 
 # ==================================================================
 
 data_obs <- summary_coords %>%
@@ -275,20 +134,14 @@ data_obs <- data_obs %>%
     sunset_local  = with_tz(sunset_utc, tzone = "America/Toronto")
   )
     
-write.csv(data_obs, "observationSummary.csv")
-
-#saving a file for species natural history to be uses as lookup
-
-speciesList <- unique(data_obs$species)
-write.csv (speciesList, "data_obs_speciesList.csv")
-
-
-station_pairs <- read.csv("observationSummary.csv") #53515 obs
-str(station_pairs)
+write_csv(data_obs, "observationSummary.csv")
 
 #====================================================================
 # station pair filtering column creation for later filtering
 #===================================================================
+
+station_pairs <- read.csv("observationSummary.csv") #142303 obs
+str(station_pairs)
 
 #filter out same station pairs and station unknown
 
@@ -299,7 +152,7 @@ filtered_pairs <- station_pairs %>%
     previousStationName != "Unknown station"
   )
 str(filtered_pairs)
-#37084 obs
+#94643 obs
 
 #loading great lakes watershed polygon, contains subbasins for each lake
 GLWatershed <- st_read("./greatlakes_subbasins/greatlakes_subbasins.shp")
@@ -352,13 +205,13 @@ filtered_df <- filtered_pairs %>%
     # Keep if either the current OR the previous station is in GLWS
     (current_in_GLWS | previous_in_GLWS))
 
-str(filtered_df) #27680 obs
+str(filtered_df) #35865  obs
 
 table(filtered_df$valid_distance)
 #Valid_distance
-#TRUE 11945
-#FALSE_LESS 14376
-#FALSE_MORE 1359
+#TRUE 13706
+#FALSE_LESS 20377
+#FALSE_MORE 1782
 
 filtered_df$flight <- ifelse(filtered_df$movement_duration_hours < 12,
                              "flight",

@@ -16,6 +16,8 @@ library(purrr)
 library(sf)
 library(ggplot2)
 library(knitr)
+library(mapview)
+library(DT)
 
 Sys.setenv(TZ = "UTC") 
 
@@ -253,7 +255,7 @@ species_main_summary <- flightInfo_df %>%
     total_flights = sum(flight == "flight"),
     total_incidents = sum(flight == "incidence"),
     night_detections = sum(diel_period == "night"),
-    daytime_detections = sum(diel_period == "daytime"),
+    daytime_detections = sum(diel_period == "daylight"),
     near_sunset_detections = sum(nearSun == "sunset"),
     near_sunrise_detections = sum(nearSun == "sunrise"),
     avg_step_speed_kmh = mean(step_speed_kmh, na.rm = TRUE),
@@ -282,7 +284,43 @@ species_seasonal_summary <- flightInfo_df %>%
 big_summary_table <- left_join(species_main_summary, species_seasonal_summary, by = "species")
 ```
 
-```{r}
-kable(big_summary_table, 
-      format.args = list(scientific = FALSE))
+
+```{r echo = FALSE}
+datatable(big_summary_table, 
+          filter = "top",
+           class = "cell-border stripe")
+```
+
+**Map of detection data by station**
+```{r echo = FALSE}
+# Summarize the detection data by station
+station_summary <- flightInfo_df %>%
+  group_by(stationID, lon, lat) %>%
+  summarise(,
+    total_detections = n(),
+    .groups = "drop"
+  ) 
+# Convert into a spatial object 
+station_sf <- st_as_sf(
+  station_summary, 
+  coords = c("lon", "lat"), 
+  crs = 4326
+)
+#trying to change the binning of the data to make the points look different
+custom_breaks <- c(0, 5, 10, 50, 100, 200, 400, 500, Inf)
+#same with the circle size
+custom_sizes <- c(1, 3, 6, 12, 22, 30, 45, 65)
+
+station_sf$mapped_size <- custom_sizes[findInterval(station_sf$total_detections, custom_breaks, all.inside = TRUE)]
+
+#Create the map of detections
+mapview(
+  station_sf, 
+  zcol = "total_detections", # to colour by number of detections
+  cex = "mapped_size", # change circle size based on above
+  at = custom_breaks,
+  legend = TRUE, 
+  layer.name  = "Number of detections at stations",
+  alpha.regions = 0.7 # Make the points slightly transparent
+)
 ```
