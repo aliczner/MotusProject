@@ -14,6 +14,8 @@ library(readr)
 library(tidyr)
 library(purrr)
 library(sf)
+library(ggplot2)
+library(knitr)
 
 Sys.setenv(TZ = "UTC") 
 
@@ -153,6 +155,7 @@ cat("The number of detections removed:",
 ### Correcting station flag issues
 
 **Flag 1, the same start and end time between two different towers**
+
 There were 26 detections with Flag_1
 
 Detections under this flag occurred when two stations (confirmed it was only ever 2 stations) picked up the same individual was in range of two stations. 
@@ -174,19 +177,112 @@ Detections here are similar to Flag_2 but there isn't a duplicated row. These de
 
 I could not figure out how to fix this error so these detections were removed. 
 
-
-
-```{r }
+**final datasheet**
+```{r echo = FALSE }
 flightInfo_df <- read.csv("StationPairsFiltered.csv")
 str(flightInfo_df)
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+**Detections at each distance**
+```{r}
+table(flightInfo_df$valid_distance)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# Summary Data
+
+Total number of species and tags
+```{r}
+length(unique(flightInfo_df$species)) #124
+length(unique(flightInfo_df$tagDeployID)) #4494
+```
+Detections per tag
+```{r, echo= FALSE}
+tag_counts <- flightInfo_df %>% 
+  group_by(tagDeployID) %>% 
+  summarise(total_detections = n(), .groups = "drop")
+```
+```{r}
+max(tag_counts$total_detections)
+median(tag_counts$total_detections)
+mean(tag_counts$total_detections)
+```
+
+Histogram of detections
+
+```{r, echo=FALSE}
+ggplot(tag_counts, aes(x = total_detections)) +
+  geom_histogram(binwidth = 5, fill = "purple4", color = "white") +
+  labs(
+    title = "Distribution of Detections per Tag",
+    x = "Number of Detections",
+    y = "Count of Tags"
+  ) +
+  theme_minimal()
+```
+
+Zoomed in histogram of detections (without the long tail)
+
+```{r, echo=FALSE}
+ggplot(tag_counts, aes(x = total_detections)) +
+  geom_histogram(binwidth = 5, 
+                 boundary = 0, 
+                 fill = "purple4", 
+                 colour = "white") +
+  coord_cartesian(xlim = c(1, 50)) + #zooms in
+  labs(
+    title = "Distribution of Detections per Tag",
+    x = "Number of Detections",
+    y = "Count of Tags"
+  ) +
+  theme_minimal()
+```
+
+**species level summary table**
+
+```{r echo=FALSE}
+# Calculate the overall species-level metrics
+species_main_summary <- flightInfo_df %>%
+  group_by(species) %>%
+  summarise(
+    total_detections = n(),
+    unique_tags = n_distinct(tagDeployID),
+    unique_stations = n_distinct(stationID),
+    num_years_detected = n_distinct(year_start),
+    year_range = paste0(min(year_start), " - ", 
+                        max(year_start)),
+    total_flights = sum(flight == "flight"),
+    total_incidents = sum(flight == "incidence"),
+    night_detections = sum(diel_period == "night"),
+    daytime_detections = sum(diel_period == "daytime"),
+    near_sunset_detections = sum(nearSun == "sunset"),
+    near_sunrise_detections = sum(nearSun == "sunrise"),
+    avg_step_speed_kmh = mean(step_speed_kmh, na.rm = TRUE),
+    max_step_speed_kmh = max(step_speed_kmh, na.rm = TRUE),
+    avg_step_distance_km = mean(distance_km, na.rm = TRUE), 
+    max_step_distance_km   = max(distance_km, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Calculate the seasonal splits (detections and unique individuals per season)
+species_seasonal_summary <- flightInfo_df %>%
+  group_by(species, season) %>%
+  summarise(
+    detections = n(),
+    tags       = n_distinct(tagDeployID),
+    .groups    = "drop"
+  ) %>%
+  # Pivot the data wider so each season gets its own columns
+  pivot_wider(
+    names_from   = season,
+    values_from  = c(detections, tags),
+    names_glue   = "{season}_{.value}"
+  )
+
+# Join the main summary and seasonal summary into one master table
+big_summary_table <- left_join(species_main_summary, species_seasonal_summary, by = "species")
+```
+
+```{r}
+kable(big_summary_table, 
+      format.args = list(scientific = FALSE))
+```

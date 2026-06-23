@@ -308,7 +308,7 @@ st_crs(GLWatershed) #ESPG 6269
 
 #transform both the polygon and station pairs to lambert conformal conic
 
-#need to run current and previous stations separate;y
+#need to run current and previous stations separately
 current_sf <- st_as_sf(filtered_pairs, 
                        coords = c("lon", "lat"), 
                        crs = 4326) %>%
@@ -365,47 +365,6 @@ filtered_df$flight <- ifelse(filtered_df$movement_duration_hours < 12,
                              "incidence") 
 
 write.csv(filtered_df, "StationPairsFiltered.csv")
-
-#==================================================
-# summary data by individual
-#=================================================
-
-length(unique(filtered_df$species)) #124
-length(unique(filtered_df$tagDeployID)) #4494
-
-library(ggplot2)
-
-# Calculate the number of detections per tag
-tag_counts <- filtered_df %>% 
-  group_by(tagDeployID) %>% 
-  summarise(total_detections = n(), .groups = "drop")
-# max = 473
-# median = 3
-# mean = 6.2
-
-# Plot the histogram
-ggplot(tag_counts, aes(x = total_detections)) +
-  geom_histogram(binwidth = 5, fill = "purple4", color = "white") +
-  labs(
-    title = "Distribution of Detections per Tag",
-    x = "Number of Detections",
-    y = "Count of Tags"
-  ) +
-  theme_minimal()
-
-#zoomed in histogram without such a long tail
-ggplot(tag_counts, aes(x = total_detections)) +
-  geom_histogram(binwidth = 5, 
-                 boundary = 0, 
-                 fill = "purple4", 
-                 colour = "white") +
-  coord_cartesian(xlim = c(1, 50)) + #zooms in
-  labs(
-    title = "Distribution of Detections per Tag",
-    x = "Number of Detections",
-    y = "Count of Tags"
-  ) +
-  theme_minimal()
 
 #====================================================================
 # checking for, and counting duplicate tsStart/End
@@ -681,6 +640,48 @@ flightInfo_df <- cleaned_df %>%
 names(flightInfo_df)
 
 write.csv(flightInfo_df, "StationPairsFiltered.csv", row.names = FALSE)
+
+#==================================================
+# summary data by individual
+#=================================================
+
+length(unique(flightInfo_df$species)) #124
+length(unique(flightInfo_df$tagDeployID)) #4494
+
+library(ggplot2)
+
+# Calculate the number of detections per tag
+tag_counts <- flightInfo_df %>% 
+  group_by(tagDeployID) %>% 
+  summarise(total_detections = n(), .groups = "drop")
+# max = 463
+# median = 3
+# mean = 5.08
+
+# Plot the histogram
+ggplot(tag_counts, aes(x = total_detections)) +
+  geom_histogram(binwidth = 5, fill = "purple4", color = "white") +
+  labs(
+    title = "Distribution of Detections per Tag",
+    x = "Number of Detections",
+    y = "Count of Tags"
+  ) +
+  theme_minimal()
+
+#zoomed in histogram without such a long tail
+ggplot(tag_counts, aes(x = total_detections)) +
+  geom_histogram(binwidth = 5, 
+                 boundary = 0, 
+                 fill = "purple4", 
+                 colour = "white") +
+  coord_cartesian(xlim = c(1, 50)) + #zooms in
+  labs(
+    title = "Distribution of Detections per Tag",
+    x = "Number of Detections",
+    y = "Count of Tags"
+  ) +
+  theme_minimal()
+
 #=====================================================================
 # creating flight paths
 # ====================================================================
