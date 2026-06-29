@@ -234,70 +234,105 @@ cleaned_backwards <- filtered_df %>%
 #================================================================
 # calculating centroids when detections overlap more stations
 #================================================================
+#will also look for false positives so midpoints are not calculated
+# for impossible distances
+#none of the detections occurred at the same time
 
-# End-to-end pipeline to process local overlaps and flag false positives
+# flag false positives 
 final_cleaned_df <- cleaned_backwards %>%
-  # 1. Classify tracks using your validated columns
   mutate(
     track_status = case_when(
-      speedKmH > 60 & travelDurationHours < 1 & travelDistanceKMs > 30  ~ "FALSE_POSITIVE",
-      speedKmH > 60 & travelDurationHours < 1 & travelDistanceKMs <= 30 ~ "LOCAL_OVERLAP",
-      TRUE ~ "VALID_FLIGHT"
+      # flag as local overlapping detections with high speed and low distance
+      travelDistanceKMs <= 30 & speedKmH > 120 ~ "LOCAL_OVERLAP",
+      # flag as false positive for very high speeds >30 km
+      speedKmH > 120                           ~ "FALSE_POSITIVE",
+      # all other flights flagged as valid
+      TRUE                                     ~ "VALID_FLIGHT"
     )
   ) %>%
-  
-  # 2. Set up chronological tracking order per animal
+# arrange chronologically
   arrange(tagDeployID, tsStart_dt) %>%
   group_by(tagDeployID) %>%
-  mutate(
-    stationDuplicateFlag = if_else(track_status == "LOCAL_OVERLAP", "flag_1", "none")
-  ) %>%
-  ungroup() %>%
   
-  # 3. Calculate midpoints for local overlaps mathematically (keeps numeric data intact)
+  # Calculate midpoints for local overlaps mathematically (keeps numeric data intact)
   mutate(
-    lon = if_else(stationDuplicateFlag == "flag_1" & !is.na(lon_previous), (lon + lon_previous) / 2, lon),
-    lat = if_else(stationDuplicateFlag == "flag_1" & !is.na(lat_previous), (lat + lat_previous) / 2, lat),
+    lon = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lon_previous), (lon + lon_previous) / 2, lon),
+    lat = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lat_previous), (lat + lat_previous) / 2, lat),
     stationName = if_else(
-      stationDuplicateFlag == "flag_1", 
+      track_status == "LOCAL_OVERLAP", 
       paste0(previousStationName, " & ", stationName), 
       stationName
     )
   ) %>%
   
-  # 4. Push centroid coordinates forward to the next sequential tracking row
+  # arrange chronologically
   arrange(tagDeployID, tsStart_dt) %>%
   group_by(tagDeployID) %>%
+  
+  # calculate centroids using geosphere
   mutate(
-    follows_flag1 = lag(stationDuplicateFlag == "flag_1", default = FALSE),
+    centroid = if_else(
+      track_status == "LOCAL_OVERLAP" & !is.na(lon_previous),
+      #centroid requires a matrix
+      geosphere::midPoint(cbind(lon_previous, 
+                                lat_previous), 
+                          cbind(lon, lat)),
+      cbind(lon, lat)
+    ),
+    lon = centroid[, 1],
+    lat = centroid[, 2],
     
-    previousStationName = if_else(follows_flag1, lag(stationName), previousStationName),
-    previousStationID   = if_else(follows_flag1, lag(stationID), previousStationID),
-    lon_previous        = if_else(follows_flag1, lag(lon), lon_previous),
-    lat_previous        = if_else(follows_flag1, lag(lat), lat_previous),
+    stationName = if_else(
+      track_status == "LOCAL_OVERLAP", 
+      paste0(previousStationName, " & ", stationName), 
+      stationName
+    )
+  ) %>%
+  select(-centroid) %>% # remove temporary matrix column
+  
+  # Put centroid coordinates to the next sequential row
+  mutate(
+    follows_overlap = lag(track_status == "LOCAL_OVERLAP", 
+                          default = FALSE),
     
-    stationDuplicateFlag = if_else(follows_flag1 & stationDuplicateFlag == "none", "flag_1_resolved", stationDuplicateFlag)
+    previousStationName = if_else(follows_overlap, 
+                                  lag(stationName), 
+                                  previousStationName),
+    previousStationID   = if_else(follows_overlap, 
+                                  lag(stationID), 
+                                  previousStationID),
+    lon_previous        = if_else(follows_overlap, 
+                                  lag(lon), 
+                                  lon_previous),
+    lat_previous        = if_else(follows_overlap, 
+                                  lag(lat), 
+                                  lat_previous),
+    
+    # Update track_status directly
+    track_status = if_else(follows_overlap & 
+                             track_status == "VALID_FLIGHT", 
+                           "LOCAL_OVERLAP_RESOLVED", 
+                           track_status)
   ) %>%
   
-  # 5. Remove the raw unblended duplicate row (keeps the centroid row)
-  filter(stationDuplicateFlag != "flag_1") %>%
+  # Remove the duplicate row, unless it is the only one
+  filter(track_status != "LOCAL_OVERLAP" | lead(follows_overlap, 
+                                                default = FALSE) == FALSE) %>%
   
-  # 6. Recalculate track distances for the updated paths
+  # Recalculate distances for the centroids
   mutate(
     distance_km = if_else(
-      follows_flag1,
-      geosphere::distHaversine(cbind(lon_previous, lat_previous), cbind(lon, lat)) / 1000,
+      follows_overlap,
+      geosphere::distHaversine(cbind(lon_previous, 
+                                     lat_previous), 
+                               cbind(lon, lat)) / 1000,
       distance_km
     )
   ) %>%
-  select(-follows_flag1) %>% 
+  select(-follows_overlap) %>% 
   ungroup()
 
-# Run diagnostics to confirm everything worked perfectly
-print(table(final_cleaned_df$track_status))
-print(table(final_cleaned_df$stationDuplicateFlag))
-
-
+table(final_cleaned_df$track_status)
 
 # =============================================
 # adding additional flight information
@@ -347,7 +382,8 @@ flightInfo_df <- cleaned_df %>%
     sunset_posix    = ymd_hms(sunset_local),
     
     # Add a column for whether the flight was during daylight or at night
-    diel_period = if_else(tsStart_posix >= sunrise_posix & tsStart_posix <= sunset_posix, 
+    diel_period = if_else(tsStart_posix >= sunrise_posix & 
+                            tsStart_posix <= sunset_posix, 
                           "daylight", 
                           "night"),
     
@@ -377,7 +413,64 @@ flightInfo_df <- cleaned_df %>%
 
 names(flightInfo_df)
 
-write.csv(flightInfo_df, "StationPairsFiltered.csv", row.names = FALSE)
+# adding the subbasin information to the dataframe
+
+flightInfo_sf <- st_as_sf(
+  flightInfo_df, 
+  coords = c("lon", "lat"), 
+  crs = st_crs(GLWatershed), 
+  remove = FALSE # Keeps lon/lat columns
+)
+
+# join to lat/lons by the subbasin
+stations_joined <- st_join(flightInfo_sf, 
+                           GLWatershed, join = st_intersects)
+
+# Drop geometry column
+flightInfo_geo <- stations_joined %>%
+  st_drop_geometry() %>%
+  #rename from polygon file from merge to subbasin
+  rename(subbasin = merge)
+
+table(flightInfo_geo$subbasin)
+
+write.csv(flightInfo_geo, "StationPairsFiltered.csv", row.names = FALSE)
+
+#==============================================================
+# adding animal information (tag site, sex, age)
+#==============================================================
+
+animalMeta <- read.csv("./StationDownloads/GLWS_Animal_Metadata.csv")
+
+#rename the columns so when it is joined it makes sense
+#there are many instances with the same tagID even by species
+#try adding in year column to also help with the join
+animalMeta <- animalMeta %>% 
+  mutate(lon_tagSite = longitude,
+         lat_tagSite = latitude,
+         #in the date there is the name of the tz in brackets that is 
+         #confusing lubridate so need to remove it
+         dtStart_clean = str_remove(dtStart, " GMT.*$"),
+         dtStart_format = parse_date_time(dtStart_clean, 
+                                          orders = "a b d Y H:M:S"),
+         tag_year = year(dtStart_format)
+  )
+
+
+#adding in tag site info and sex and age info to the main df
+
+animalnfo <- flightInfo_geo %>%
+  left_join(
+    animalMeta %>% select(tagID, 
+                          lat_tagSite, 
+                          lon_tagSite, 
+                          age, 
+                          sex,
+                          name, tag_year),
+    by = c("tagDeployID" = "tagID", 
+           "species" = "name",
+           "year_start" = "tag_year")
+  )
 
 #==================================================
 # summary data by individual
