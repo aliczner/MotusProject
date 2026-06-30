@@ -231,6 +231,8 @@ cleaned_backwards <- filtered_df %>%
   ) %>%
   filter(tsEnd_dt >= tsStart_dt)
 
+str(cleaned_backwards) #27309
+
 #================================================================
 # calculating centroids when detections overlap more stations
 #================================================================
@@ -338,7 +340,7 @@ table(final_cleaned_df$track_status)
 # adding additional flight information
 #===============================================================
 
-flightInfo_df <- cleaned_df %>%
+flightInfo_df <- final_cleaned_df %>%
   # sort by individual and in chronological order
   arrange(tagDeployID, tsStart_dt) %>%
   group_by(tagDeployID) %>%
@@ -413,26 +415,45 @@ flightInfo_df <- cleaned_df %>%
 
 names(flightInfo_df)
 
-# adding the subbasin information to the dataframe
+str(flightInfo_df) #27181 obs
 
-flightInfo_sf <- st_as_sf(
+# adding the subbasin information to the dataframe
+#needs to be done separately for current vs previous station
+
+# current station
+flightInfo_sf_current <- st_as_sf(
   flightInfo_df, 
   coords = c("lon", "lat"), 
   crs = st_crs(GLWatershed), 
-  remove = FALSE # Keeps lon/lat columns
+  remove = FALSE
 )
 
-# join to lat/lons by the subbasin
-stations_joined <- st_join(flightInfo_sf, 
-                           GLWatershed, join = st_intersects)
+# joining to the data for current station
+flightInfo_geo <- st_join(flightInfo_sf_current, 
+                          GLWatershed, 
+                          join = st_intersects) %>%
+  rename(subbasin = merge) # rename current subbasin column
 
-# Drop geometry column
-flightInfo_geo <- stations_joined %>%
-  st_drop_geometry() %>%
-  #rename from polygon file from merge to subbasin
-  rename(subbasin = merge)
+# previous station, the geometry from current needs to be removed
+flightInfo_df_temp <- st_drop_geometry(flightInfo_geo)
 
-table(flightInfo_geo$subbasin)
+# Re-convert to sf using the previous coordinates
+flightInfo_sf_prev <- st_as_sf(
+  flightInfo_df_temp,
+  coords = c("lon_previous", "lat_previous"), 
+  crs = st_crs(GLWatershed), 
+  remove = FALSE
+)
+
+# joinging to the data for the previous station
+flightInfo_geo <- st_join(flightInfo_sf_prev, 
+                            GLWatershed, 
+                            join = st_intersects) %>%
+  rename(subbasin_previous = merge) %>% # rename previous subbasin column
+  st_drop_geometry()# Drop the final geometry column
+
+table(flightInfo_geo$subbasin, useNA= "ifany")
+table(flightInfo_geo$subbasin_previous, useNA = "ifany")
 
 write.csv(flightInfo_geo, "StationPairsFiltered.csv", row.names = FALSE)
 
@@ -472,6 +493,7 @@ animalnfo <- flightInfo_geo %>%
            "year_start" = "tag_year")
   )
 
+write_csv(animalnfo, "StationPairsFiltered.csv", row.names = FALSE)
 #==================================================
 # summary data by individual
 #=================================================
