@@ -478,24 +478,36 @@ animalMeta <- animalMeta %>%
     by = c("species" = "speciesID")
   )
 
+
 #rename the columns so when it is joined it makes sense
 #there are many instances with the same tagID even by species
 #it looks like this happens when redeploying a tag that fell off, so will
 #sort chronologically, and take the most recent record
+
+#first need to make a column for tagging year
+# but the dtStart column has weird formatting 
 animalMeta <- animalMeta %>%
-  select(tagID, 
-         name, 
+  mutate(
+    tag_year = as.numeric(str_extract(dtStart, "\\b\\d{4}\\b")),
+    species_clean = str_trim(str_remove(speciesName, "\\s*\\(.*\\)"))
+  ) %>% 
+  rename(
+    lat_tagSite = latitude,
+    lon_tagSite = longitude
+  )
+
+
+animalMeta <- animalMeta %>%
+  select(id, 
+         species_clean, 
          tag_year, 
          lat_tagSite, 
          lon_tagSite, 
          age, 
          sex) %>%
-  arrange(tagID, 
-          name, 
-          tag_year) %>%  # Sorts chronologically by tag year
-  group_by(tagID,
-           name) %>%
-  slice_tail(n = 1) %>% #takes the last row (the most recent)
+  group_by(id,
+           tag_year,
+           species_clean) %>%
   ungroup()
 
 #adding in tag site info and sex and age info to the main df
@@ -503,18 +515,20 @@ animalMeta <- animalMeta %>%
 animalInfo <- flightInfo_geo %>%
   left_join(
     animalMeta %>% 
-      select(tagID, 
+      select(id, 
              lat_tagSite, 
              lon_tagSite, 
              age, 
              sex, 
-             name),
-    by = c("tagDeployID" = "tagID", 
-           "species" = "name")
+             species_clean,
+             tag_year),
+    by = c("tagDeployID" = "id", 
+           "year_start" = "tag_year",
+           "species" = "species_clean")
   )
   
 
-write_csv(animalnfo, "StationPairsFiltered.csv", row.names = FALSE)
+write.csv(animalnfo, "StationPairsFiltered.csv", row.names = FALSE)
 #==================================================
 # summary data by individual
 #=================================================
