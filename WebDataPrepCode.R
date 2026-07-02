@@ -526,9 +526,73 @@ animalInfo <- flightInfo_geo %>%
            "year_start" = "tag_year",
            "species" = "species_clean")
   )
-  
 
 write.csv(animalnfo, "StationPairsFiltered.csv", row.names = FALSE)
+  
+#==========================================================================
+# add columns to check the tagging location
+#=========================================================================
+#columns to add:
+  #whether the tagging site was in the GLWS
+    #if they are, how far from the polygon edge are they?
+    # if they are, and are during migration, how many days into migration
+  #flags for tagging site
+    #invalid distance - too far to be the start of migration
+    #invalid time - either not migration, or too late into migration
+    # both invalid distance and time
+    # tagging site within the GLWS
+
+
+#some didn't have tagging location so splitting by coords or not
+has_coords <- animalInfo %>% filter(!is.na(lon_tagSite) & 
+                                      !is.na(lat_tagSite))
+no_coords  <- animalInfo %>% filter(is.na(lon_tagSite) | is.na(lat_tagSite))
+
+# convert to spatial object, reproject so distance can be calculated
+has_coords_sf <- st_as_sf(
+  has_coords,
+  coords = c("lon_tagSite", "lat_tagSite"),
+  crs = st_crs(GLWatershed),
+  remove = FALSE
+) %>% 
+  st_transform(crs = 3348)
+
+# see if the coordinated are within the GLWS
+inside_check <- lengths(st_intersects(has_coords_sf, 
+                                      GLWS_proj)) > 0
+
+GLWS_dissolved <- st_union(GLWS_proj)
+GLWS_outline <- st_cast(GLWS_dissolved, "MULTILINESTRING")
+
+#Calculate shortest distance to the watershed boundary line 
+distances_m <- st_distance(has_coords_sf, GLWS_outline)
+distances_km <- as.numeric(distances_m) / 1000
+
+# Assign Yes/No if it is within the GLWS
+has_coords_df <- has_coords_sf %>%
+  mutate(
+    tagIn_GLWS = if_else(inside_check, "Yes", "No"),
+    # Calculate distance ONLY if inside the GLWS
+    GLWS_distance = if_else(
+      tagIn_GLWS == "Yes", 
+      round(distances_km, 2), 
+      NA_real_
+    )
+  ) %>% 
+  st_drop_geometry() 
+
+#Assign "Missing" to the rows that lacked coordinates
+no_coords_df <- no_coords %>%
+  mutate(
+    tagIn_GLWS = "Missing",
+    GLWS_distance = NA_real_
+  )
+
+# put them together
+animalInfo_GLWS <- bind_rows(has_coords_df, no_coords_df)
+
+
+
 #==================================================
 # summary data by individual
 #=================================================
@@ -645,5 +709,4 @@ mapview(GLWS_proj,
   mapview(prev_map_GLWS, 
           col.regions = "orange",
           layer.name = "Previous Station")
-
 
