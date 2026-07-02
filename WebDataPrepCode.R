@@ -8,6 +8,7 @@ library(stringr)
 library(readr)
 library(tidyr)
 library(purrr)
+library(sf)
 library(geosphere)
 
 Sys.setenv(TZ = "UTC") 
@@ -461,37 +462,57 @@ write.csv(flightInfo_geo, "StationPairsFiltered.csv", row.names = FALSE)
 # adding animal information (tag site, sex, age)
 #==============================================================
 
+#the species names do not match, us the species metadata to pull species
+#name by the species number
+
+speciesMeta <- read.csv("./StationDownloads/GLWS_Species_Metadata.csv")
+
 animalMeta <- read.csv("./StationDownloads/GLWS_Animal_Metadata.csv")
+
+# Add the species name to animalMeta using a left join
+animalMeta <- animalMeta %>%
+  left_join(
+    speciesMeta %>% 
+      select(speciesID, speciesName = english) %>% 
+      distinct(speciesID, .keep_all = TRUE),
+    by = c("species" = "speciesID")
+  )
 
 #rename the columns so when it is joined it makes sense
 #there are many instances with the same tagID even by species
-#try adding in year column to also help with the join
-animalMeta <- animalMeta %>% 
-  mutate(lon_tagSite = longitude,
-         lat_tagSite = latitude,
-         #in the date there is the name of the tz in brackets that is 
-         #confusing lubridate so need to remove it
-         dtStart_clean = str_remove(dtStart, " GMT.*$"),
-         dtStart_format = parse_date_time(dtStart_clean, 
-                                          orders = "a b d Y H:M:S"),
-         tag_year = year(dtStart_format)
-  )
-
+#it looks like this happens when redeploying a tag that fell off, so will
+#sort chronologically, and take the most recent record
+animalMeta <- animalMeta %>%
+  select(tagID, 
+         name, 
+         tag_year, 
+         lat_tagSite, 
+         lon_tagSite, 
+         age, 
+         sex) %>%
+  arrange(tagID, 
+          name, 
+          tag_year) %>%  # Sorts chronologically by tag year
+  group_by(tagID,
+           name) %>%
+  slice_tail(n = 1) %>% #takes the last row (the most recent)
+  ungroup()
 
 #adding in tag site info and sex and age info to the main df
 
-animalnfo <- flightInfo_geo %>%
+animalInfo <- flightInfo_geo %>%
   left_join(
-    animalMeta %>% select(tagID, 
-                          lat_tagSite, 
-                          lon_tagSite, 
-                          age, 
-                          sex,
-                          name, tag_year),
+    animalMeta %>% 
+      select(tagID, 
+             lat_tagSite, 
+             lon_tagSite, 
+             age, 
+             sex, 
+             name),
     by = c("tagDeployID" = "tagID", 
-           "species" = "name",
-           "year_start" = "tag_year")
+           "species" = "name")
   )
+  
 
 write_csv(animalnfo, "StationPairsFiltered.csv", row.names = FALSE)
 #==================================================
