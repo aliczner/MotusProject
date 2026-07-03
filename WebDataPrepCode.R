@@ -612,8 +612,60 @@ no_coords_df <- no_coords %>%
 # put them together
 animalInfo_GLWS <- bind_rows(has_coords_df, no_coords_df)
 
+write.csv (animalInfo_GLWS, "StationPairsFiltered.csv", 
+           row.names = FALSE)
 
+#==============================================================
+# add in days post "start" of migration
+#==============================================================
 
+animalInfo_dates <- animalInfo_GLWS %>%
+  mutate(
+    tsStart_clean = parse_date_time(tsStart, orders = "dmy HMS"),
+    record_year = year(tsStart_clean),
+    #need to ignore the specific year for this
+    spring_start = as.Date(paste0(record_year, "-04-15")), 
+    fall_start   = as.Date(paste0(record_year, "-08-15")),
+    #calculate days post migration start
+    days_postMigration = case_when(
+      season == "Spring Migration" ~ as.numeric(as.Date(tsStart_clean) - spring_start),
+      season == "Fall Migration" ~ as.numeric(as.Date(tsStart_clean) - fall_start),
+      TRUE                      ~ NA_real_
+    )
+  ) %>% 
+  select(-tsStart_clean, -record_year, -spring_start, -fall_start)
+
+#===============================================================
+# add in tagging location flags
+#===============================================================
+
+#this is in relation to calculating arrival dates, and possible issues
+
+#the flags:
+  #flag if tagging site is within the GLWS (Flag_1)
+    # flag if within GLWS it is too far inland (Flag_2)
+    # flag if during migration but too late within migration (Flag_3) 
+    # flag if the within GLWS tag site is not during migration (Flag_4)
+
+# Create flags for the spring arrival phenology
+animalInfo_flags <- animalInfo_GLWS %>%
+  mutate(
+    tagSite_Flags = case_when(
+      # Flag 2: Within GLWS and too far inland
+      tagIn_GLWS == "Yes" & 
+        Lake_distance > 5 ~ "Flag 2",
+      
+      # Flag 4: Within GLWS but tag site is not during migration
+      tagIn_GLWS == "Yes" & 
+        season %in% c("Summer", "Winter") ~ "Flag 3",
+      
+      # Flag 1: Tagging site is within the GLWS (and didn't trigger Flag 2 or 4)
+      tagIn_GLWS == "Yes" ~ "Flag 1",
+      
+      # Default if no conditions are met
+      TRUE ~ "None"
+    )
+  )
 #==================================================
 # summary data by individual
 #=================================================
