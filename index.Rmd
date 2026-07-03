@@ -29,89 +29,142 @@ Overview of the data from Motus Project #1 summary data (downloaded off the web)
 The summary data was downloaded from all Motus Project #1 towers.
 The data are downloaded as "pairs" with the current and previous station noted
 
-The downloaded data included the following headings:
-```{r echo=FALSE}
-data_active <- read.csv("./StationDownloads/Motus-data-project-1_detections_downloaded-2026-06-03.csv")
-#at first just did active towers to prevent crashing
-data_inactive <- read.csv ("./StationDownloads/Motus-data-multiple-stations_detections_downloaded-2026-06-09.csv")
+A preview downloaded data:
+```{r echo=FALSE, warning=FALSE}
+data_ON <- read.csv("./StationDownloads/Motus-data-region-CA-ON_detections_downloaded-2026-06-23.csv")
+data_NY <- read.csv("./StationDownloads/Motus-data-region-US-NY_detections_downloaded-2026-06-23.csv")
+data_PA <- read.csv("./StationDownloads/Motus-data-region-US-PA_detections_downloaded-2026-06-23.csv")
+data_OH <- read.csv("./StationDownloads/Motus-data-region-US-OH_detections_downloaded-2026-06-23.csv")
+data_IN <- read.csv("./StationDownloads/Motus-data-region-US-IN_detections_downloaded-2026-06-23.csv")
+data_IL <- read.csv("./StationDownloads/Motus-data-region-US-IL_detections_downloaded-2026-06-23.csv")
+data_WI <- read.csv("./StationDownloads/Motus-data-region-US-WI_detections_downloaded-2026-06-23.csv")
 
-#the inactive data had frequency as num, convert so it matches
-data_inactive <- data_inactive %>%  
-  mutate(tagFrequency = as.character(tagFrequency))
+# join all the station data 
+data_raw <- bind_rows(data_ON,
+                      data_NY,
+                      data_PA,
+                      data_OH,
+                      data_IN,
+                      data_IL,
+                      data_WI) %>%  # some rows have it some do not
+  distinct() 
 
-#join active and inactive stations together
+# Format the date columns using lubridate functions
+data_cleaned <- data_raw %>%
+  mutate(
+    tsStart_dt = dmy_hms(tsStart, tz = "UTC"),
+    tsEnd_dt   = dmy_hms(tsEnd, tz = "UTC"),
+    year_start = year(tsStart_dt),
+    year_end   = year(tsEnd_dt)
+    )
 
-data_raw <- bind_rows(data_active, data_inactive) %>%
-  select(-tagFrequency) %>%  # some rows have it some do not
-  distinct()
-str(data_raw)
+#================================================================
+# Station metadata json file
+#================================================================
+
+# Station metadata json file with GPS coordinates
+stationsJSON <- jsonlite::read_json("./JSONFiles/Stations.json")
+
+stationsJSON <- jsonlite::fromJSON("./JSONFiles/Stations.json", 
+                                   simplifyDataFrame = TRUE)
+
+readr::write_csv(stationsJSON$results, "StationsJSON.csv")
+
+#getting coordinates from stationsJSON to make a lookup table for 
+# previous tower coordinates
+id_coords_lookup <- stationsJSON$results %>% 
+  select(stationID, 
+         latitude, 
+         longitude) %>% 
+  filter(!is.na(latitude) & !is.na(longitude)) %>% 
+  # Convert stationID to integer
+  mutate(stationID = as.integer(stationID)) %>% 
+  # Group by ID and take the first coordinate 
+  group_by(stationID) %>% 
+  summarise(
+    latitude = first(latitude),
+    longitude = first(longitude),
+    .groups = "drop"
+  )
+
+# Add previous station coordinates using the ID columns
+summary_coords <- data_cleaned %>% 
+  # Convert both ID columns to integers
+  mutate(
+    previousStationID = as.integer(previousStationID),
+    stationID         = as.integer(stationID)
+  ) %>% 
+  
+  # Join the lookup table to the previousStationID column
+  left_join(
+    id_coords_lookup, 
+    by = c("previousStationID" = "stationID")
+  ) %>% 
+  
+  # Rename the new columns coordinates
+  rename(
+    lat_previous = latitude,
+    lon_previous = longitude
+  )
+
+head(summary_coords)
 ```
+
 **Additional columns were added:**
 
-- calculated my own movement_duration_hous, traveDurationHours is from the download
-- calculated my own distance_km, travelDistanceKMs is from the download
-- added in a column for season
+- column for season
   - spring = April 15 - June 15
   - summer = June 15 - August 18
   - fall = August 15 - November 15
   - Winter = November 15- April 15
-- sunrise_utc/sunset_utc: the timing of sunrise/sunset in UTC
-- sunrise_local/sunset_local: the timing of sunrise/Sunset in Eastern Time
-- current_in_GLWS/previous_in_GLWS: if the station (current or previous) is within the Great Lakes Watershed
-- distance_km: the distance between the two stations
-- valid_distance: 
-  - FALSE_LESS = the distance between stations is less than 30 km
-  - FALSE_MORE = the distance between stations is more than 965 km 
-  - TRUE = the distance between stations is between 30 - 965 km
-- flight:
-  flight = when the detection between stations is < 12 hrs
-  incidence = when the detection between stations is > 12 hrs
-- stationDuplicateFlag: flags detection issues (note buffer of 3 seconds was used to account for potential delays in detection and processing time at stations)
-  - flag_1 = the start and end time are the same
-  - flag_2 multiple towers detected at once, differing start times between rows going back in time
-  - flag_3 mismatched run where it ends before its start time. 
-  - flag_1_resolved = where flag_1 issues were corrected 
-- eventClusterID = unique identifier assigned to a group of overlapping or continuous tracking events for a specific individual, created while tracking flagged errors
-- new_flight = to identify the start of a new flight, used while tracking flagged errrors, a new flight is when the movement duration is > 12 hrs
-- flight_number: a sequential numbering of flights for that individual
-- flight_ID: adds "Flight_" to the flight number (from flight_number)
-- step_speed_kmh: the speed in km/h at that flight step
-- turning_angle: the turning angle calculated, where possible (=> detections needed)
-- diel_period: whether the flight is occuring at night or during daylight
-- nearSun: whether the flight occured within one hour of sunrrise/sunset
-  - sunrise = the flight occurred within one hour of sunrise
-  - sunset = the flight occurred within on hour of sunset
-  - none = the flight did not occur within one hour of sunrise or sunset. 
-
-**Data removed:** 
-
-- Detections at the same current and previous station were removed as we are focusing on flights
-- If the previous station name is unknown, the detection was removed
 
 ```{r echo=FALSE}
-station_pairs <- read.csv("observationSummary.csv")
+
+obs_sum <- read.csv("observationSummary.csv")
+
+table(obs_sum$season)
+```
+
+- column for sunrise/sunset time
+- column for sunrise/sunset local time
+- column for movement duration in hours
+
+**number of detections in raw data**
+
+```{r echo=FALSE}
+nrow(obs_sum)
+```
+
+## Data cleaning
+
+Number of detections after removing unknown stations and station pairs that were the same
+(bird remained at the same station)
+
+```{r echo=FALSE}
+station_pairs <- read.csv("observationSummary.csv") #142303 obs
+
+#filter out same station pairs and station unknown
+
 filtered_pairs <- station_pairs %>% 
   filter(
     previousStationID != stationID,
     previousStationName != "Unknown",
     previousStationName != "Unknown station"
   )
-cat("The number of detections before removals:", 
-    nrow(station_pairs), "\n")
-
-cat("The number of detections after removing same station and unknown stations:", 
-    nrow(filtered_pairs), "\n")
-cat("The number of detections removed:", (nrow(station_pairs)- nrow(filtered_pairs)))
+nrow(filtered_pairs)
 ```
-- Only kept station pairs where at least one station (either current or previous) was within the Great Lakes Watershed
 
-``` {r echo=FALSE}
+Number of detectons with at least one station in the station-pair within the Great Lakes
+Watershed (GLWS)
+```{r echo=FALSE}
 #loading great lakes watershed polygon, contains subbasins for each lake
 GLWatershed <- st_read("./greatlakes_subbasins/greatlakes_subbasins.shp")
+#checking CRS
+st_crs(GLWatershed) #ESPG 6269
 
 #transform both the polygon and station pairs to lambert conformal conic
 
-#need to run current and previous stations separate;y
+#need to run current and previous stations separately
 current_sf <- st_as_sf(filtered_pairs, 
                        coords = c("lon", "lat"), 
                        crs = 4326) %>%
@@ -136,191 +189,25 @@ filtered_pairs$distance_km <- as.numeric(st_distance(current_sf,
                                                      by_element = TRUE)
 ) / 1000 #convert to km
 
+# Mark TRUE if distance is 30 - 965 km, otherwise
+#FALSE_LESS if distance is less than 30 km 
+# FALSE_MORE if distance is more than 965 km
+
 filtered_pairs$valid_distance <- ifelse(filtered_pairs$distance_km < 30, 
                                         "FALSE_LESS",
                                         ifelse(filtered_pairs$distance_km > 965, 
                                                "FALSE_MORE", 
                                                "TRUE"))
 
+#==================================================================
+# station pair filtering by criteria
+#==================================================================
+
 filtered_df <- filtered_pairs %>%
   filter(
     # Keep if either the current OR the previous station is in GLWS
     (current_in_GLWS | previous_in_GLWS))
-cat("The number of detections after removing those not in the Great Lakes Watershed:",
-    nrow(filtered_df))
-cat("The number of detections removed:", 
-    (nrow(filtered_pairs)-nrow(filtered_df)))
 
-```
-- detections under Flag_2 that have mismatched end times, and all Flag_3s were removed
-
-### Correcting station flag issues
-
-**Flag 1, the same start and end time between two different towers**
-
-There were 26 detections with Flag_1
-
-Detections under this flag occurred when two stations (confirmed it was only ever 2 stations) picked up the same individual was in range of two stations. 
-To fix this issue, the midpoint of the two stations was calculated. This location became the new coordinates for the current station. The current station name was replaced with a combination of both station names separated by "_". The previous station of the next detection was renamed with the combined name. These corrections were flagged as "flag_1_resolved"
-
-**Flag 2, multiple towers detected the individual once, differing start times between rows going back in time**
-
-There were 1774 detections with Flag_2
-
-Detections under this flag occurred when stations that are close together were picking up the same individual simultaneously and this looks like it resulted in a processing error where the detection was recorded twice (identical on 2 rows) _except_ once row would have the end time as earlier than the start time. 
-
-To fix this error, I removed the duplicate row with the incorrect end time
-
-**Flag 3, mismatched run where it ends before its start time**
-
-There were 5527 detections with Flag_3
-
-Detections here are similar to Flag_2 but there isn't a duplicated row. These detections appear to be mistakes that occurred during processing where the end time is recorded as before the start time. 
-
-I could not figure out how to fix this error so these detections were removed. 
-
-**final datasheet**
-```{r echo = FALSE }
-flightInfo_df <- read.csv("StationPairsFiltered.csv")
-str(flightInfo_df)
+nrow(filtered_df) #35865  obs
 ```
 
-**Detections at each distance**
-```{r}
-table(flightInfo_df$valid_distance)
-```
-
-# Summary Data
-
-Total number of species and tags
-```{r}
-length(unique(flightInfo_df$species)) #124
-length(unique(flightInfo_df$tagDeployID)) #4494
-```
-Detections per tag
-```{r, echo= FALSE}
-tag_counts <- flightInfo_df %>% 
-  group_by(tagDeployID) %>% 
-  summarise(total_detections = n(), .groups = "drop")
-```
-```{r}
-max(tag_counts$total_detections)
-median(tag_counts$total_detections)
-mean(tag_counts$total_detections)
-```
-
-Histogram of detections
-
-```{r, echo=FALSE}
-ggplot(tag_counts, aes(x = total_detections)) +
-  geom_histogram(binwidth = 5, fill = "purple4", color = "white") +
-  labs(
-    title = "Distribution of Detections per Tag",
-    x = "Number of Detections",
-    y = "Count of Tags"
-  ) +
-  theme_minimal()
-```
-
-Zoomed in histogram of detections (without the long tail)
-
-```{r, echo=FALSE}
-ggplot(tag_counts, aes(x = total_detections)) +
-  geom_histogram(binwidth = 5, 
-                 boundary = 0, 
-                 fill = "purple4", 
-                 colour = "white") +
-  coord_cartesian(xlim = c(1, 50)) + #zooms in
-  labs(
-    title = "Distribution of Detections per Tag",
-    x = "Number of Detections",
-    y = "Count of Tags"
-  ) +
-  theme_minimal()
-```
-
-**species level summary table**
-
-```{r echo=FALSE}
-# Calculate the overall species-level metrics
-species_main_summary <- flightInfo_df %>%
-  group_by(species) %>%
-  summarise(
-    total_detections = n(),
-    unique_tags = n_distinct(tagDeployID),
-    unique_stations = n_distinct(stationID),
-    num_years_detected = n_distinct(year_start),
-    year_range = paste0(min(year_start), " - ", 
-                        max(year_start)),
-    total_flights = sum(flight == "flight"),
-    total_incidents = sum(flight == "incidence"),
-    night_detections = sum(diel_period == "night"),
-    daytime_detections = sum(diel_period == "daylight"),
-    near_sunset_detections = sum(nearSun == "sunset"),
-    near_sunrise_detections = sum(nearSun == "sunrise"),
-    avg_step_speed_kmh = mean(step_speed_kmh, na.rm = TRUE),
-    max_step_speed_kmh = max(step_speed_kmh, na.rm = TRUE),
-    avg_step_distance_km = mean(distance_km, na.rm = TRUE), 
-    max_step_distance_km   = max(distance_km, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Calculate the seasonal splits (detections and unique individuals per season)
-species_seasonal_summary <- flightInfo_df %>%
-  group_by(species, season) %>%
-  summarise(
-    detections = n(),
-    tags       = n_distinct(tagDeployID),
-    .groups    = "drop"
-  ) %>%
-  # Pivot the data wider so each season gets its own columns
-  pivot_wider(
-    names_from   = season,
-    values_from  = c(detections, tags),
-    names_glue   = "{season}_{.value}"
-  )
-
-# Join the main summary and seasonal summary into one master table
-big_summary_table <- left_join(species_main_summary, species_seasonal_summary, by = "species")
-```
-
-
-```{r echo = FALSE}
-datatable(big_summary_table, 
-          filter = "top",
-           class = "cell-border stripe")
-```
-
-**Map of detection data by station**
-```{r echo = FALSE}
-# Summarize the detection data by station
-station_summary <- flightInfo_df %>%
-  group_by(stationID, lon, lat) %>%
-  summarise(,
-    total_detections = n(),
-    .groups = "drop"
-  ) 
-# Convert into a spatial object 
-station_sf <- st_as_sf(
-  station_summary, 
-  coords = c("lon", "lat"), 
-  crs = 4326
-)
-#trying to change the binning of the data to make the points look different
-custom_breaks <- c(0, 5, 10, 50, 100, 200, 400, 500, Inf)
-#same with the circle size
-custom_sizes <- c(1, 3, 6, 12, 22, 30, 45, 65)
-
-station_sf$mapped_size <- custom_sizes[findInterval(station_sf$total_detections, custom_breaks, all.inside = TRUE)]
-
-#Create the map of detections
-mapview(
-  station_sf, 
-  zcol = "total_detections", # to colour by number of detections
-  cex = "mapped_size", # change circle size based on above
-  at = custom_breaks,
-  legend = TRUE, 
-  layer.name  = "Number of detections at stations",
-  alpha.regions = 0.7 # Make the points slightly transparent
-)
-```
