@@ -655,11 +655,11 @@ animalInfo_flags <- animalInfo_GLWS %>%
       tagIn_GLWS == "Yes" & 
         Lake_distance > 5 ~ "Flag 2",
       
-      # Flag 4: Within GLWS but tag site is not during migration
+      # Flag 3: Within GLWS but tag site is not during migration
       tagIn_GLWS == "Yes" & 
         season %in% c("Summer", "Winter") ~ "Flag 3",
       
-      # Flag 1: Tagging site is within the GLWS (and didn't trigger Flag 2 or 4)
+      # Flag 1: Tagging site is within the GLWS, but not another flag
       tagIn_GLWS == "Yes" ~ "Flag 1",
       
       # Default if no conditions are met
