@@ -564,9 +564,24 @@ inside_check <- lengths(st_intersects(has_coords_sf,
 GLWS_dissolved <- st_union(GLWS_proj)
 GLWS_outline <- st_cast(GLWS_dissolved, "MULTILINESTRING")
 
+#shapefile for the great lakes
+
+ne_50m_lakes <- read_sf(dsn="./LakesShapefiles/gl_mainlakes_wgs84_rp.shp")
+lakes_proj <- st_transform(ne_50m_lakes, 
+                           crs = 3348)
+
+lakes_outline <-st_cast(lakes_proj, "MULTILINESTRING")
+
 #Calculate shortest distance to the watershed boundary line 
-distances_m <- st_distance(has_coords_sf, GLWS_outline)
+distances_m <- st_distance(has_coords_sf, 
+                           GLWS_outline)
 distances_km <- as.numeric(distances_m) / 1000
+
+#calculate shortest distance to the lakes boundary
+lake_distances_m <- st_distance(has_coords_sf,
+                                lakes_outline)
+lake_distances_km <-as.numeric(lake_distances_m)/1000
+
 
 # Assign Yes/No if it is within the GLWS
 has_coords_df <- has_coords_sf %>%
@@ -577,6 +592,11 @@ has_coords_df <- has_coords_sf %>%
       tagIn_GLWS == "Yes", 
       round(distances_km, 2), 
       NA_real_
+    ),
+    Lake_distance = if_else(
+      tagIn_GLWS == "Yes",
+      round(lake_distances_km, 2),
+      NA_real_
     )
   ) %>% 
   st_drop_geometry() 
@@ -585,7 +605,8 @@ has_coords_df <- has_coords_sf %>%
 no_coords_df <- no_coords %>%
   mutate(
     tagIn_GLWS = "Missing",
-    GLWS_distance = NA_real_
+    GLWS_distance = NA_real_,
+    Lake_distance = NA_real_    
   )
 
 # put them together
