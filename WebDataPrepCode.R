@@ -247,7 +247,7 @@ final_cleaned_df <- cleaned_backwards %>%
     track_status = case_when(
       # flag as local overlapping detections with high speed and low distance
       travelDistanceKMs <= 30 & speedKmH > 120 ~ "LOCAL_OVERLAP",
-      # flag as false positive for very high speeds >30 km
+      # flag as false positive for very high speeds 
       speedKmH > 120                           ~ "FALSE_POSITIVE",
       # all other flights flagged as valid
       TRUE                                     ~ "VALID_FLIGHT"
@@ -257,10 +257,12 @@ final_cleaned_df <- cleaned_backwards %>%
   arrange(tagDeployID, tsStart_dt) %>%
   group_by(tagDeployID) %>%
   
-  # Calculate midpoints for local overlaps mathematically (keeps numeric data intact)
+  # Calculate midpoints for local overlaps
   mutate(
-    lon = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lon_previous), (lon + lon_previous) / 2, lon),
-    lat = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lat_previous), (lat + lat_previous) / 2, lat),
+    lon = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lon_previous), 
+                  (lon + lon_previous) / 2, lon),
+    lat = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lat_previous), 
+                  (lat + lat_previous) / 2, lat),
     stationName = if_else(
       track_status == "LOCAL_OVERLAP", 
       paste0(previousStationName, " & ", stationName), 
@@ -311,7 +313,7 @@ final_cleaned_df <- cleaned_backwards %>%
                                   lag(lat), 
                                   lat_previous),
     
-    # Update track_status directly
+    # Update track_status 
     track_status = if_else(follows_overlap & 
                              track_status == "VALID_FLIGHT", 
                            "LOCAL_OVERLAP_RESOLVED", 
@@ -337,7 +339,8 @@ final_cleaned_df <- cleaned_backwards %>%
 
 table(final_cleaned_df$track_status)
 
-# =============================================
+
+# =============================================================
 # adding additional flight information
 #===============================================================
 
@@ -644,8 +647,7 @@ animalInfo_dates <- animalInfo_GLWS %>%
 #the flags:
   #flag if tagging site is within the GLWS (Flag_1)
     # flag if within GLWS it is too far inland (Flag_2)
-    # flag if during migration but too late within migration (Flag_3) 
-    # flag if the within GLWS tag site is not during migration (Flag_4)
+    # flag if the within GLWS tag site is not during migration (Flag_3)
 
 # Create flags for the spring arrival phenology
 animalInfo_flags <- animalInfo_GLWS %>%
@@ -666,6 +668,8 @@ animalInfo_flags <- animalInfo_GLWS %>%
       TRUE ~ "None"
     )
   )
+
+write.csv(animalInfo_flags, "StationPairsFiltered.csv", row.names = FALSE)
 #==================================================
 # summary data by individual
 #=================================================

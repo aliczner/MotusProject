@@ -1,7 +1,12 @@
 ---
 title: "Station Summary Data"
 author: "Amanda Liczner"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
 ---
 
 ```{r setup, include=FALSE, warning=FALSE}
@@ -189,15 +194,6 @@ filtered_pairs$distance_km <- as.numeric(st_distance(current_sf,
                                                      by_element = TRUE)
 ) / 1000 #convert to km
 
-# Mark TRUE if distance is 30 - 965 km, otherwise
-#FALSE_LESS if distance is less than 30 km 
-# FALSE_MORE if distance is more than 965 km
-
-filtered_pairs$valid_distance <- ifelse(filtered_pairs$distance_km < 30, 
-                                        "FALSE_LESS",
-                                        ifelse(filtered_pairs$distance_km > 965, 
-                                               "FALSE_MORE", 
-                                               "TRUE"))
 
 #==================================================================
 # station pair filtering by criteria
@@ -211,3 +207,210 @@ filtered_df <- filtered_pairs %>%
 nrow(filtered_df) #35865  obs
 ```
 
+columns added continued: 
+
+- a column for whether the detection is likely a flight (< 12 hrs duration)
+or an incident (> 12 hr duration)
+
+```{r echo = FALSE}
+
+filtered_df$flight <- ifelse(filtered_df$movement_duration_hours < 12,
+                             "flight",
+                             "incidence") 
+table(filtered_df$flight)
+```
+
+**cleaning detections that went back in time**
+
+There are detections where the end time is before the start time. These are some sort of error and need to be removed
+
+The number of detections after removing the backwards detections:
+``` {r echo = FALSE}
+cleaned_backwards <- filtered_df %>%
+  mutate(
+    tsStart_dt = ymd_hms(tsStart_dt, tz = "UTC"),
+    tsEnd_dt = ymd_hms(tsEnd_dt, tz = "UTC")
+  ) %>%
+  filter(tsEnd_dt >= tsStart_dt)
+nrow(cleaned_backwards)
+```
+**cleaning detections that are false positives and local overlaps**
+
+Two other data problems exist:
+
+- false positives
+- local overlapping stations picking up the same individual
+
+local overlap was distinguished from false positives by comparing speed and distance. Local overalp would have:
+
+- a distance of <= 30 km between stations
+- a speed > 120 km/h
+
+...and false positives: 
+
+- any remaining detections with speeds > 120 km/h
+
+False positives were removed
+
+Local overlap detections were corrected by calculating the centroid between the two stations, replacing the coordinates with this new centroid location, recalculating the distance, replacing the name of the current station as a combination to the two stations, and for the next detection in sequence, replacing the previous station information with the new centroid information.
+
+``` {r echo = FALSE}
+
+# flag false positives 
+final_cleaned_df <- cleaned_backwards %>%
+  mutate(
+    track_status = case_when(
+      # flag as local overlapping detections with high speed and low distance
+      travelDistanceKMs <= 30 & speedKmH > 120 ~ "LOCAL_OVERLAP",
+      # flag as false positive for very high speeds 
+      speedKmH > 120                           ~ "FALSE_POSITIVE",
+      # all other flights flagged as valid
+      TRUE                                     ~ "VALID_FLIGHT"
+    )
+  ) %>%
+# arrange chronologically
+  arrange(tagDeployID, tsStart_dt) %>%
+  group_by(tagDeployID) %>%
+  
+  # Calculate midpoints for local overlaps
+  mutate(
+    lon = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lon_previous), 
+                  (lon + lon_previous) / 2, lon),
+    lat = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lat_previous), 
+                  (lat + lat_previous) / 2, lat),
+    stationName = if_else(
+      track_status == "LOCAL_OVERLAP", 
+      paste0(previousStationName, " & ", stationName), 
+      stationName
+    )
+  ) %>%
+  
+  # arrange chronologically
+  arrange(tagDeployID, tsStart_dt) %>%
+  group_by(tagDeployID) %>%
+  
+  # calculate centroids using geosphere
+  mutate(
+    centroid = if_else(
+      track_status == "LOCAL_OVERLAP" & !is.na(lon_previous),
+      #centroid requires a matrix
+      geosphere::midPoint(cbind(lon_previous, 
+                                lat_previous), 
+                          cbind(lon, lat)),
+      cbind(lon, lat)
+    ),
+    lon = centroid[, 1],
+    lat = centroid[, 2],
+    
+    stationName = if_else(
+      track_status == "LOCAL_OVERLAP", 
+      paste0(previousStationName, " & ", stationName), 
+      stationName
+    )
+  ) %>%
+  select(-centroid) %>% # remove temporary matrix column
+  
+  # Put centroid coordinates to the next sequential row
+  mutate(
+    follows_overlap = lag(track_status == "LOCAL_OVERLAP", 
+                          default = FALSE),
+    
+    previousStationName = if_else(follows_overlap, 
+                                  lag(stationName), 
+                                  previousStationName),
+    previousStationID   = if_else(follows_overlap, 
+                                  lag(stationID), 
+                                  previousStationID),
+    lon_previous        = if_else(follows_overlap, 
+                                  lag(lon), 
+                                  lon_previous),
+    lat_previous        = if_else(follows_overlap, 
+                                  lag(lat), 
+                                  lat_previous),
+    
+    # Update track_status 
+    track_status = if_else(follows_overlap & 
+                             track_status == "VALID_FLIGHT", 
+                           "LOCAL_OVERLAP_RESOLVED", 
+                           track_status)
+  ) %>%
+  
+  # Remove the duplicate row, unless it is the only one
+  filter(track_status != "LOCAL_OVERLAP" | lead(follows_overlap, 
+                                                default = FALSE) == FALSE) %>%
+  
+  # Recalculate distances for the centroids
+  mutate(
+    distance_km = if_else(
+      follows_overlap,
+      geosphere::distHaversine(cbind(lon_previous, 
+                                     lat_previous), 
+                               cbind(lon, lat)) / 1000,
+      distance_km
+    )
+  ) %>%
+  select(-follows_overlap) %>% 
+  ungroup()
+
+table(final_cleaned_df$track_status)
+```
+
+Number of detections after removing false positives and resolving local overlap
+```{r echo = FALSE}
+nrow(final_cleaned_df)
+```
+
+## Flight information added
+
+Flight specific information was added as additional columns
+This includes:
+
+- flight number (sequential flights per individual)
+- speed per step in the flight
+- turning angle (where it could be calculated)
+- diel period (daylight or night) of the flight
+- hours from sunrise and sunset (can be used to identify flights close to take-off or landing)
+- additional grouping variable added:
+  - which subbasin the occurrence took place in within the GLWS
+
+## Individual information added
+
+Information about each individual was added including:
+
+- the tag deployment coordinates
+- sex/age of the individual (if the project included this)
+- days post migration the detection occurred
+- tagging location potential issue flags
+  - whether the tagging location was inside or outside the GLWS
+  - how far from the boundary and the closest lake shoreline the tagging location was
+
+## Data Flags
+
+There are two columns of data flags 
+
+1) Valid Distance:
+- for station pairs that are < 30 km apart = FALSE_LESS
+- for station pairs that are > 965 km apart = FALSE_MORE
+
+Pairs that are close together are likely local overlaps
+Pairs that are too far apart are likely false positives 
+
+``` {r echo = FALSE}
+animalFlags <- read.csv("StationPairsFiltered.csv")
+
+table(animalFlags$valid_distance)
+```
+
+
+2) Tagging location flags for spring phenology
+- if the tagging location is within the GLWS = Flag_1
+- if the tagging location is within the GLWS and far inland >5 km = Flag_2
+- if the tagging location is within the GLWS and not during migration (was tagged in summer or winter) = Flag_3 
+
+These are flagged to be investigated as potential issues for assessing spring arrival phenology
+
+```{r echo = FALSE}
+animalFlags <- read.csv("StationPairsFiltered.csv")
+
+table(animalFlags$tagSite_Flags)
+```
