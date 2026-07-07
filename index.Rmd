@@ -406,6 +406,7 @@ table(animalFlags$valid_distance)
 - if the tagging location is within the GLWS = Flag_1
 - if the tagging location is within the GLWS and far inland >5 km = Flag_2
 - if the tagging location is within the GLWS and not during migration (was tagged in summer or winter) = Flag_3 
+- if the tagging location information is missing = Flag_4
 
 These are flagged to be investigated as potential issues for assessing spring arrival phenology
 
@@ -413,4 +414,26 @@ These are flagged to be investigated as potential issues for assessing spring ar
 animalFlags <- read.csv("StationPairsFiltered.csv")
 
 table(animalFlags$tagSite_Flags)
+```
+
+## Spring phenology
+
+**filter by spring season and remove problematic tagging site flags**
+
+Keep only observations that:
+
+- occurred in spring
+- had no tagging site flags
+- or were Flag_1 (within the GLWS but <5 km from the shoreline)
+
+``` {r echo = FALSE}
+
+fullData <- read.csv ("StationPairsFiltered.csv")
+
+springData <- fullData %>% 
+  filter(
+    season == "Spring Migration",
+    tagSite_Flags %in% c("None", "Flag_1")
+  )
+nrow(springData)
 ```

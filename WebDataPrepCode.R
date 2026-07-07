@@ -648,11 +648,15 @@ animalInfo_dates <- animalInfo_GLWS %>%
   #flag if tagging site is within the GLWS (Flag_1)
     # flag if within GLWS it is too far inland (Flag_2)
     # flag if the within GLWS tag site is not during migration (Flag_3)
+    # flag is the tagging location is missing (Flag_4)
 
 # Create flags for the spring arrival phenology
 animalInfo_flags <- animalInfo_GLWS %>%
   mutate(
     tagSite_Flags = case_when(
+      # Flag 4: No tagging location recorded
+      tagIn_GLWS == "Missing" ~ "Flag 4",
+      
       # Flag 2: Within GLWS and too far inland
       tagIn_GLWS == "Yes" & 
         Lake_distance > 5 ~ "Flag 2",
@@ -670,6 +674,7 @@ animalInfo_flags <- animalInfo_GLWS %>%
   )
 
 write.csv(animalInfo_flags, "StationPairsFiltered.csv", row.names = FALSE)
+
 #==================================================
 # summary data by individual
 #=================================================
