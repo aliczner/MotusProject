@@ -426,6 +426,8 @@ Keep only observations that:
 - had no tagging site flags
 - or were Flag_1 (within the GLWS but <5 km from the shoreline)
 
+**Number of detections**
+
 ``` {r echo = FALSE}
 
 fullData <- read.csv ("StationPairsFiltered.csv")
@@ -433,7 +435,40 @@ fullData <- read.csv ("StationPairsFiltered.csv")
 springData <- fullData %>% 
   filter(
     season == "Spring Migration",
-    tagSite_Flags %in% c("None", "Flag_1")
+    tagSite_Flags %in% c("None", "Flag_1"),
+    current_in_GLWS == "TRUE"
   )
 nrow(springData)
 ```
+**Number of species**
+
+``` {r echo = FALSE}
+length(unique(springData$species))
+```
+
+**Number of tags**
+``` {r echo = FALSE}
+length(unique(springData$tagDeployID))
+```
+
+**Table of first arrival date by speices, subbbasin and year**
+``` {r echo = FALSE}
+
+springTable <- springData %>% 
+  mutate(tsStart_dt = as_datetime(tsStart_dt, tz = "GMT")) %>%
+  group_by(species, subbasin, year_start) %>% 
+  summarise(
+    first_arrival = format(as.Date(min(tsStart_dt)), "%m-%d"),
+    .groups = "drop"
+  ) %>%
+  arrange(year_start) %>% 
+  pivot_wider(
+    names_from = year_start, 
+    values_from = first_arrival
+  )
+
+datatable(springTable)
+
+
+```
+
