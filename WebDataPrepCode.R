@@ -104,9 +104,9 @@ data_obs <- summary_coords %>%
   #Classify migration periods and seasons based on tsStart_dt
   mutate(
     #using month and day as a number (MMDD)
-    md = as.numeric(format(tsStart_dt, "%m%d")),
+    md = as.numeric(format(tsEnd_dt, "%m%d")),
     season = case_when(
-      md >= 0415 & md < 0615  ~ "Spring Migration", #mid April to mid June
+      md >= 0301 & md < 0615  ~ "Spring Migration", #March to mid June
       md >= 0615 & md < 0815  ~ "Summer", #mid april to mid August
       md >= 0815 & md < 1115  ~ "Fall Migration", #mid Aug to mid Nov
       TRUE                     ~ "Winter" # mid-Nov to mid-Apr 
@@ -188,15 +188,7 @@ filtered_pairs$distance_km <- as.numeric(st_distance(current_sf,
                                                      by_element = TRUE)
 ) / 1000 #convert to km
 
-# Mark TRUE if distance is 30 - 965 km, otherwise
-#FALSE_LESS if distance is less than 30 km 
-# FALSE_MORE if distance is more than 965 km
 
-filtered_pairs$valid_distance <- ifelse(filtered_pairs$distance_km < 30, 
-                                        "FALSE_LESS",
-                                        ifelse(filtered_pairs$distance_km > 965, 
-                                               "FALSE_MORE", 
-                                               "TRUE"))
 
 #==================================================================
 # station pair filtering by criteria
@@ -208,12 +200,6 @@ filtered_df <- filtered_pairs %>%
     (current_in_GLWS | previous_in_GLWS))
 
 str(filtered_df) #35865  obs
-
-table(filtered_df$valid_distance)
-#Valid_distance
-#TRUE 13706
-#FALSE_LESS 20377
-#FALSE_MORE 1782
 
 filtered_df$flight <- ifelse(filtered_df$movement_duration_hours < 12,
                              "flight",
@@ -234,192 +220,75 @@ cleaned_backwards <- filtered_df %>%
 
 str(cleaned_backwards) #27309
 
-#================================================================
-# calculating centroids when detections overlap more stations
-#================================================================
-#will also look for false positives so midpoints are not calculated
-# for impossible distances
-#none of the detections occurred at the same time
-
-# flag false positives 
-final_cleaned_df <- cleaned_backwards %>%
-  mutate(
-    track_status = case_when(
-      # flag as local overlapping detections with high speed and low distance
-      travelDistanceKMs <= 30 & speedKmH > 120 ~ "LOCAL_OVERLAP",
-      # flag as false positive for very high speeds 
-      speedKmH > 120                           ~ "FALSE_POSITIVE",
-      # all other flights flagged as valid
-      TRUE                                     ~ "VALID_FLIGHT"
-    )
-  ) %>%
-# arrange chronologically
-  arrange(tagDeployID, tsStart_dt) %>%
-  group_by(tagDeployID) %>%
-  
-  # Calculate midpoints for local overlaps
-  mutate(
-    lon = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lon_previous), 
-                  (lon + lon_previous) / 2, lon),
-    lat = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lat_previous), 
-                  (lat + lat_previous) / 2, lat),
-    stationName = if_else(
-      track_status == "LOCAL_OVERLAP", 
-      paste0(previousStationName, " & ", stationName), 
-      stationName
-    )
-  ) %>%
-  
-  # arrange chronologically
-  arrange(tagDeployID, tsStart_dt) %>%
-  group_by(tagDeployID) %>%
-  
-  # calculate centroids using geosphere
-  mutate(
-    centroid = if_else(
-      track_status == "LOCAL_OVERLAP" & !is.na(lon_previous),
-      #centroid requires a matrix
-      geosphere::midPoint(cbind(lon_previous, 
-                                lat_previous), 
-                          cbind(lon, lat)),
-      cbind(lon, lat)
-    ),
-    lon = centroid[, 1],
-    lat = centroid[, 2],
-    
-    stationName = if_else(
-      track_status == "LOCAL_OVERLAP", 
-      paste0(previousStationName, " & ", stationName), 
-      stationName
-    )
-  ) %>%
-  select(-centroid) %>% # remove temporary matrix column
-  
-  # Put centroid coordinates to the next sequential row
-  mutate(
-    follows_overlap = lag(track_status == "LOCAL_OVERLAP", 
-                          default = FALSE),
-    
-    previousStationName = if_else(follows_overlap, 
-                                  lag(stationName), 
-                                  previousStationName),
-    previousStationID   = if_else(follows_overlap, 
-                                  lag(stationID), 
-                                  previousStationID),
-    lon_previous        = if_else(follows_overlap, 
-                                  lag(lon), 
-                                  lon_previous),
-    lat_previous        = if_else(follows_overlap, 
-                                  lag(lat), 
-                                  lat_previous),
-    
-    # Update track_status 
-    track_status = if_else(follows_overlap & 
-                             track_status == "VALID_FLIGHT", 
-                           "LOCAL_OVERLAP_RESOLVED", 
-                           track_status)
-  ) %>%
-  
-  # Remove the duplicate row, unless it is the only one
-  filter(track_status != "LOCAL_OVERLAP" | lead(follows_overlap, 
-                                                default = FALSE) == FALSE) %>%
-  
-  # Recalculate distances for the centroids
-  mutate(
-    distance_km = if_else(
-      follows_overlap,
-      geosphere::distHaversine(cbind(lon_previous, 
-                                     lat_previous), 
-                               cbind(lon, lat)) / 1000,
-      distance_km
-    )
-  ) %>%
-  select(-follows_overlap) %>% 
-  ungroup()
-
-table(final_cleaned_df$track_status)
-
 
 # =============================================================
 # adding additional flight information
 #===============================================================
 
-flightInfo_df <- final_cleaned_df %>%
+flightInfo_df <- cleaned_backwards %>%
   # sort by individual and in chronological order
-  arrange(tagDeployID, tsStart_dt) %>%
+  arrange(tagDeployID,
+          tsEnd_dt) %>%
   group_by(tagDeployID) %>%
   mutate(
-      # Mark a TRUE every time a new flight starts (first row or > 12 hrs)
-      new_flight = row_number() == 1 | movement_duration_hours > 12,
-      
-      # add flight number per individual
-      flight_number = cumsum(new_flight),
-      
-      # Create the unique text identifier needed for splitting/nesting later
-      flight_ID = paste0("Flight_", flight_number)
-    ) %>%
+    new_flight = row_number() == 1 | movement_duration_hours > 12,
+    flight_number = cumsum(new_flight),
+    flight_ID = paste0("Flight_", 
+                       flight_number)
+  ) %>%
   # Regroup by animal AND flight number for step and angle math
-  group_by(tagDeployID, 
-           flight_number) %>%
+  group_by(tagDeployID, flight_number) %>%
   mutate(
-    # Speed of each step in a flight (km divided by travel duration hours)
-    # Using if_else to prevent division-by-zero errors if duration is 0
     step_speed_kmh = if_else(travelDurationHours > 0, 
                              distance_km / travelDurationHours, 
                              0),
-    
-    # Turning angle of each step
-    # calculate absolute headings for current step
-    current_bearing = geosphere::bearing(cbind(lon_previous, lat_previous), 
-                                         cbind(lon, lat)),
-    # Look at the bearing of the next step within the same flight path
+    current_bearing = geosphere::bearing(cbind(lon_previous, 
+                                               lat_previous),
+                                         cbind(lon, 
+                                               lat)),
     next_bearing = lead(current_bearing),
-    
-    # Calculate the change in direction (-180 to +180 degrees)
     turning_angle = next_bearing - current_bearing,
     turning_angle = (turning_angle + 180) %% 360 - 180
   ) %>%
   ungroup() %>%
-  
   mutate(
-    # Convert character columns to formal date-time objects
-    tsStart_posix   = ymd_hms(tsStart_dt),
-    sunrise_posix   = ymd_hms(sunrise_local),
-    sunset_posix    = ymd_hms(sunset_local),
+    # Ensure all date-time objects are created first
+    tsStart_posix = ymd_hms(tsStart_dt),
+    tsEnd_posix = ymd_hms(tsEnd_dt),
+    sunrise_posix = ymd_hms(sunrise_local),
+    sunset_posix = ymd_hms(sunset_local),
     
-    # Add a column for whether the flight was during daylight or at night
-    diel_period = if_else(tsStart_posix >= sunrise_posix & 
-                            tsStart_posix <= sunset_posix, 
-                          "daylight", 
-                          "night"),
+    # Classify diel period
+    diel_period = case_when(
+      tsStart_posix >= sunrise_posix & 
+        tsEnd_posix <= sunset_posix ~ "daylight",
+      tsEnd_posix < sunrise_posix | tsStart_posix > sunset_posix ~ "night",
+      TRUE ~ "mixed"
+    ),
     
-    # Calculate  hour gaps from twilight transitions
-    hours_from_sunset  = as.numeric(abs(difftime(tsStart_posix, 
+    # Calculate hour gaps (kept inside the same mutate block)
+    hours_from_sunset  = as.numeric(abs(difftime(tsEnd_posix, 
                                                  sunset_posix, 
                                                  units = "hours"))),
-    hours_from_sunrise = as.numeric(abs(difftime(tsStart_posix, 
+    hours_from_sunrise = as.numeric(abs(difftime(tsEnd_posix, 
                                                  sunrise_posix, 
                                                  units = "hours"))),
     
-    # Add nearSun column based on the 1-hour window proximity
+    # Add nearSun column
     nearSun = case_when(
       hours_from_sunset <= 1  ~ "sunset",
       hours_from_sunrise <= 1 ~ "sunrise",
       TRUE                    ~ "none"
     )
-  ) %>%
-  # Clean up temporary helper columns to keep the data tidy
+  ) %>% #clean up temporary columns
   select(-current_bearing, 
          -next_bearing,
+         -tsEnd_posix,
          -tsStart_posix, 
          -sunrise_posix, 
          -sunset_posix, 
          -hours_from_sunset,
          -hours_from_sunrise)
-
-names(flightInfo_df)
-
-str(flightInfo_df) #27181 obs
 
 # adding the subbasin information to the dataframe
 #needs to be done separately for current vs previous station
@@ -469,15 +338,16 @@ write.csv(flightInfo_geo, "StationPairsFiltered.csv", row.names = FALSE)
 #name by the species number
 
 speciesMeta <- read.csv("./StationDownloads/GLWS_Species_Metadata.csv")
-
 animalMeta <- read.csv("./StationDownloads/GLWS_Animal_Metadata.csv")
 
 # Add the species name to animalMeta using a left join
 animalMeta <- animalMeta %>%
   left_join(
     speciesMeta %>% 
-      select(speciesID, speciesName = english) %>% 
-      distinct(speciesID, .keep_all = TRUE),
+      select(speciesID, 
+             speciesName = english) %>% 
+      distinct(speciesID, 
+               .keep_all = TRUE),
     by = c("species" = "speciesID")
   )
 
@@ -491,8 +361,10 @@ animalMeta <- animalMeta %>%
 # but the dtStart column has weird formatting 
 animalMeta <- animalMeta %>%
   mutate(
-    tag_year = as.numeric(str_extract(dtStart, "\\b\\d{4}\\b")),
-    species_clean = str_trim(str_remove(speciesName, "\\s*\\(.*\\)"))
+    tag_year = as.numeric(str_extract(dtStart, 
+                                      "\\b\\d{4}\\b")),
+    species_clean = str_trim(str_remove(speciesName, 
+                                        "\\s*\\(.*\\)"))
   ) %>% 
   rename(
     lat_tagSite = latitude,
@@ -530,265 +402,6 @@ animalInfo <- flightInfo_geo %>%
            "species" = "species_clean")
   )
 
-write.csv(animalnfo, "StationPairsFiltered.csv", row.names = FALSE)
-  
-#==========================================================================
-# add columns to check the tagging location
-#=========================================================================
-#columns to add:
-  #whether the tagging site was in the GLWS
-    #if they are, how far from the polygon edge are they?
-    # if they are, and are during migration, how many days into migration
-  #flags for tagging site
-    #invalid distance - too far to be the start of migration
-    #invalid time - either not migration, or too late into migration
-    # both invalid distance and time
-    # tagging site within the GLWS
+write.csv(animalInfo, "StationPairsFiltered.csv", row.names = FALSE)
 
-
-#some didn't have tagging location so splitting by coords or not
-has_coords <- animalInfo %>% filter(!is.na(lon_tagSite) & 
-                                      !is.na(lat_tagSite))
-no_coords  <- animalInfo %>% filter(is.na(lon_tagSite) | is.na(lat_tagSite))
-
-# convert to spatial object, reproject so distance can be calculated
-has_coords_sf <- st_as_sf(
-  has_coords,
-  coords = c("lon_tagSite", "lat_tagSite"),
-  crs = st_crs(GLWatershed),
-  remove = FALSE
-) %>% 
-  st_transform(crs = 3348)
-
-# see if the coordinated are within the GLWS
-inside_check <- lengths(st_intersects(has_coords_sf, 
-                                      GLWS_proj)) > 0
-
-GLWS_dissolved <- st_union(GLWS_proj)
-GLWS_outline <- st_cast(GLWS_dissolved, "MULTILINESTRING")
-
-#shapefile for the great lakes
-
-ne_50m_lakes <- read_sf(dsn="./LakesShapefiles/gl_mainlakes_wgs84_rp.shp")
-lakes_proj <- st_transform(ne_50m_lakes, 
-                           crs = 3348)
-
-lakes_outline <-st_cast(lakes_proj, "MULTILINESTRING")
-
-#Calculate shortest distance to the watershed boundary line 
-distances_m <- st_distance(has_coords_sf, 
-                           GLWS_outline)
-distances_km <- as.numeric(distances_m) / 1000
-
-#calculate shortest distance to the lakes boundary
-lake_distances_m <- st_distance(has_coords_sf,
-                                lakes_outline)
-lake_distances_km <-as.numeric(lake_distances_m)/1000
-
-
-# Assign Yes/No if it is within the GLWS
-has_coords_df <- has_coords_sf %>%
-  mutate(
-    tagIn_GLWS = if_else(inside_check, "Yes", "No"),
-    # Calculate distance ONLY if inside the GLWS
-    GLWS_distance = if_else(
-      tagIn_GLWS == "Yes", 
-      round(distances_km, 2), 
-      NA_real_
-    ),
-    Lake_distance = if_else(
-      tagIn_GLWS == "Yes",
-      round(lake_distances_km, 2),
-      NA_real_
-    )
-  ) %>% 
-  st_drop_geometry() 
-
-#Assign "Missing" to the rows that lacked coordinates
-no_coords_df <- no_coords %>%
-  mutate(
-    tagIn_GLWS = "Missing",
-    GLWS_distance = NA_real_,
-    Lake_distance = NA_real_    
-  )
-
-# put them together
-animalInfo_GLWS <- bind_rows(has_coords_df, no_coords_df)
-
-write.csv (animalInfo_GLWS, "StationPairsFiltered.csv", 
-           row.names = FALSE)
-
-#==============================================================
-# add in days post "start" of migration
-#==============================================================
-
-animalInfo_dates <- animalInfo_GLWS %>%
-  mutate(
-    tsStart_clean = parse_date_time(tsStart, orders = "dmy HMS"),
-    record_year = year(tsStart_clean),
-    #need to ignore the specific year for this
-    spring_start = as.Date(paste0(record_year, "-04-15")), 
-    fall_start   = as.Date(paste0(record_year, "-08-15")),
-    #calculate days post migration start
-    days_postMigration = case_when(
-      season == "Spring Migration" ~ as.numeric(as.Date(tsStart_clean) - spring_start),
-      season == "Fall Migration" ~ as.numeric(as.Date(tsStart_clean) - fall_start),
-      TRUE                      ~ NA_real_
-    )
-  ) %>% 
-  select(-tsStart_clean, -record_year, -spring_start, -fall_start)
-
-#===============================================================
-# add in tagging location flags
-#===============================================================
-
-#this is in relation to calculating arrival dates, and possible issues
-
-#the flags:
-  #flag if tagging site is within the GLWS (Flag_1)
-    # flag if within GLWS it is too far inland (Flag_2)
-    # flag if the within GLWS tag site is not during migration (Flag_3)
-    # flag is the tagging location is missing (Flag_4)
-
-# Create flags for the spring arrival phenology
-animalInfo_flags <- animalInfo_GLWS %>%
-  mutate(
-    tagSite_Flags = case_when(
-      # Flag 4: No tagging location recorded
-      tagIn_GLWS == "Missing" ~ "Flag 4",
-      
-      # Flag 2: Within GLWS and too far inland
-      tagIn_GLWS == "Yes" & 
-        Lake_distance > 5 ~ "Flag 2",
-      
-      # Flag 3: Within GLWS but tag site is not during migration
-      tagIn_GLWS == "Yes" & 
-        season %in% c("Summer", "Winter") ~ "Flag 3",
-      
-      # Flag 1: Tagging site is within the GLWS, but not another flag
-      tagIn_GLWS == "Yes" ~ "Flag 1",
-      
-      # Default if no conditions are met
-      TRUE ~ "None"
-    )
-  )
-
-write.csv(animalInfo_flags, "StationPairsFiltered.csv", row.names = FALSE)
-
-#==================================================
-# summary data by individual
-#=================================================
-
-length(unique(flightInfo_df$species)) #140
-length(unique(flightInfo_df$tagDeployID)) #5452
-
-library(ggplot2)
-
-# Calculate the number of detections per tag
-tag_counts <- flightInfo_df %>% 
-  group_by(tagDeployID) %>% 
-  summarise(total_detections = n(), .groups = "drop")
-# max = 38
-# median = 3
-# mean = 2.97
-
-# Plot the histogram
-ggplot(tag_counts, aes(x = total_detections)) +
-  geom_histogram(binwidth = 5, fill = "purple4", color = "white") +
-  labs(
-    title = "Distribution of Detections per Tag",
-    x = "Number of Detections",
-    y = "Count of Tags"
-  ) +
-  theme_minimal()
-
-#zoomed in histogram without such a long tail
-ggplot(tag_counts, aes(x = total_detections)) +
-  geom_histogram(binwidth = 5, 
-                 boundary = 0, 
-                 fill = "purple4", 
-                 colour = "white") +
-  coord_cartesian(xlim = c(1, 50)) + #zooms in
-  labs(
-    title = "Distribution of Detections per Tag",
-    x = "Number of Detections",
-    y = "Count of Tags"
-  ) +
-  theme_minimal()
-
-#=====================================================================
-# creating flight paths
-# ====================================================================
-
-library(dplyr)
-library(tidyr)
-library(lubridate)
-
-prepared_df <- filtered_df %>% 
-  arrange(tagDeployID, tsStart_dt) %>%
-  group_by(tagDeployID) %>%
-  mutate( #calculate the lag time between steps in hours
-    step_gap = as.numeric(difftime(tsStart_dt, 
-                                   lag(tsEnd_dt), 
-                                   units = "hours")),
-    #order can get messy for stations within range ending up with negative
-    #values. converting these to zero
-    step_gap = ifelse(step_gap < 0, 0, step_gap),
-    #classify as separate flight if lag time is > 12 hrs
-    new_flight = is.na(step_gap) | (step_gap) > 12,
-    #numbering the flights
-    flight_ID = paste0("Flight_", cumsum(new_flight))
-  ) %>%
-  ungroup() %>%
-  select(
-    tagDeployID, flight_ID, season, species, 
-    stationID, stationName, lon, lat, 
-    previousStationID, previousStationName, lon_previous, lat_previous, 
-    tsStart_dt, tsEnd_dt, movement_duration_hours, distance_km, 
-    sunrise_local, sunset_local
-  )
-
-#now split into nested list
-flights_list <- prepared_df %>% 
-  # Split the data into a list by tagID
-  split(.$tagDeployID) %>% 
-  
-  # loop through each tag and split by Flight ID
-  lapply(function(individual_df) {
-    split(individual_df, individual_df$flight_ID)
-  })
-
-str(flights_list, max.level = 2) #set to level 2 to see just tag and flight list
-#======================================================================
-# creating a map of the points
-#======================================================================
-
-library(sf)
-library(mapview)
-
-#separate out spring migration
-
-spring <- subset(filtered_df, season == "Spring Migration") 
-#2910 obs
-
-current_map_GLWS <- st_as_sf(spring, 
-                             coords = c("lon", "lat"), 
-                             crs = 4326) %>% 
-  st_transform(crs = 3348)
-
-prev_map_GLWS <- st_as_sf(spring, 
-                          coords = c("lon_previous", "lat_previous"), 
-                          crs = 4326) %>% 
-  st_transform(crs = 3348)
-
-mapview(GLWS_proj, 
-        col.regions = "gray", 
-        alpha.regions = 0.3, 
-        layer.name = "GLWS") +
-  mapview(current_map_GLWS, 
-          col.regions = "blue", 
-          layer.name = "Current Station") +
-  mapview(prev_map_GLWS, 
-          col.regions = "orange",
-          layer.name = "Previous Station")
 

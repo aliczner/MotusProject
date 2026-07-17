@@ -25,6 +25,8 @@ library(mapview)
 library(DT)
 library(ggrepel)
 library(sfheaders)
+library(ggridges)
+library(plotly)
 
 Sys.setenv(TZ = "UTC") 
 
@@ -36,331 +38,22 @@ Overview of the data from Motus Project #1 summary data (downloaded off the web)
 The summary data was downloaded from all Motus Project #1 towers.
 The data are downloaded as "pairs" with the current and previous station noted
 
-A preview downloaded data:
-```{r echo=FALSE, warning=FALSE}
-data_ON <- read.csv("./StationDownloads/Motus-data-region-CA-ON_detections_downloaded-2026-06-23.csv")
-data_NY <- read.csv("./StationDownloads/Motus-data-region-US-NY_detections_downloaded-2026-06-23.csv")
-data_PA <- read.csv("./StationDownloads/Motus-data-region-US-PA_detections_downloaded-2026-06-23.csv")
-data_OH <- read.csv("./StationDownloads/Motus-data-region-US-OH_detections_downloaded-2026-06-23.csv")
-data_IN <- read.csv("./StationDownloads/Motus-data-region-US-IN_detections_downloaded-2026-06-23.csv")
-data_IL <- read.csv("./StationDownloads/Motus-data-region-US-IL_detections_downloaded-2026-06-23.csv")
-data_WI <- read.csv("./StationDownloads/Motus-data-region-US-WI_detections_downloaded-2026-06-23.csv")
-
-# join all the station data 
-data_raw <- bind_rows(data_ON,
-                      data_NY,
-                      data_PA,
-                      data_OH,
-                      data_IN,
-                      data_IL,
-                      data_WI) %>%  # some rows have it some do not
-  distinct() 
-
-# Format the date columns using lubridate functions
-data_cleaned <- data_raw %>%
-  mutate(
-    tsStart_dt = dmy_hms(tsStart, tz = "UTC"),
-    tsEnd_dt   = dmy_hms(tsEnd, tz = "UTC"),
-    year_start = year(tsStart_dt),
-    year_end   = year(tsEnd_dt)
-    )
-
-#================================================================
-# Station metadata json file
-#================================================================
-
-# Station metadata json file with GPS coordinates
-stationsJSON <- jsonlite::read_json("./JSONFiles/Stations.json")
-
-stationsJSON <- jsonlite::fromJSON("./JSONFiles/Stations.json", 
-                                   simplifyDataFrame = TRUE)
-
-readr::write_csv(stationsJSON$results, "StationsJSON.csv")
-
-#getting coordinates from stationsJSON to make a lookup table for 
-# previous tower coordinates
-id_coords_lookup <- stationsJSON$results %>% 
-  select(stationID, 
-         latitude, 
-         longitude) %>% 
-  filter(!is.na(latitude) & !is.na(longitude)) %>% 
-  # Convert stationID to integer
-  mutate(stationID = as.integer(stationID)) %>% 
-  # Group by ID and take the first coordinate 
-  group_by(stationID) %>% 
-  summarise(
-    latitude = first(latitude),
-    longitude = first(longitude),
-    .groups = "drop"
-  )
-
-# Add previous station coordinates using the ID columns
-summary_coords <- data_cleaned %>% 
-  # Convert both ID columns to integers
-  mutate(
-    previousStationID = as.integer(previousStationID),
-    stationID         = as.integer(stationID)
-  ) %>% 
-  
-  # Join the lookup table to the previousStationID column
-  left_join(
-    id_coords_lookup, 
-    by = c("previousStationID" = "stationID")
-  ) %>% 
-  
-  # Rename the new columns coordinates
-  rename(
-    lat_previous = latitude,
-    lon_previous = longitude
-  )
-
-head(summary_coords)
-```
-
 **Additional columns were added:**
 
 - column for season
-  - spring = April 15 - June 15
+  - spring = March 1 - June 15
   - summer = June 15 - August 18
   - fall = August 15 - November 15
   - Winter = November 15- April 15
-
-```{r echo=FALSE}
-
-obs_sum <- read.csv("observationSummary.csv")
-
-table(obs_sum$season)
-```
-
 - column for sunrise/sunset time
 - column for sunrise/sunset local time
 - column for movement duration in hours
-
-**number of detections in raw data**
-
-```{r echo=FALSE}
-nrow(obs_sum)
-```
-
-## Data cleaning
-
-Number of detections after removing unknown stations and station pairs that were the same
-(bird remained at the same station)
-
-```{r echo=FALSE}
-station_pairs <- read.csv("observationSummary.csv") #142303 obs
-
-#filter out same station pairs and station unknown
-
-filtered_pairs <- station_pairs %>% 
-  filter(
-    previousStationID != stationID,
-    previousStationName != "Unknown",
-    previousStationName != "Unknown station"
-  )
-nrow(filtered_pairs)
-```
-
-Number of detectons with at least one station in the station-pair within the Great Lakes
-Watershed (GLWS)
-```{r echo=FALSE}
-#loading great lakes watershed polygon, contains subbasins for each lake
-GLWatershed <- st_read("./greatlakes_subbasins/greatlakes_subbasins.shp")
-#checking CRS
-st_crs(GLWatershed) #ESPG 6269
-
-#transform both the polygon and station pairs to lambert conformal conic
-
-#need to run current and previous stations separately
-current_sf <- st_as_sf(filtered_pairs, 
-                       coords = c("lon", "lat"), 
-                       crs = 4326) %>%
-  st_transform(crs = 3348)
-
-previous_sf <- st_as_sf(filtered_pairs, 
-                        coords = c("lon_previous", "lat_previous"), 
-                        crs = 4326) %>%
-  st_transform(crs = 3348)
-
-GLWS_proj <- st_transform(GLWatershed, crs = 3348)
-
-# check if either of the stations are within the GL watershed, 
-filtered_pairs$current_in_GLWS  <- lengths(st_intersects(current_sf, 
-                                                         GLWS_proj)) > 0
-filtered_pairs$previous_in_GLWS <- lengths(st_intersects(previous_sf, 
-                                                         GLWS_proj)) > 0
-
-# calculate distance between points
-filtered_pairs$distance_km <- as.numeric(st_distance(current_sf, 
-                                                     previous_sf, 
-                                                     by_element = TRUE)
-) / 1000 #convert to km
-
-
-#==================================================================
-# station pair filtering by criteria
-#==================================================================
-
-filtered_df <- filtered_pairs %>%
-  filter(
-    # Keep if either the current OR the previous station is in GLWS
-    (current_in_GLWS | previous_in_GLWS))
-
-nrow(filtered_df) #35865  obs
-```
-
-columns added continued: 
-
 - a column for whether the detection is likely a flight (< 12 hrs duration)
 or an incident (> 12 hr duration)
-
-```{r echo = FALSE}
-
-filtered_df$flight <- ifelse(filtered_df$movement_duration_hours < 12,
-                             "flight",
-                             "incidence") 
-table(filtered_df$flight)
-```
 
 **cleaning detections that went back in time**
 
 There are detections where the end time is before the start time. These are some sort of error and need to be removed
-
-The number of detections after removing the backwards detections:
-``` {r echo = FALSE}
-cleaned_backwards <- filtered_df %>%
-  mutate(
-    tsStart_dt = ymd_hms(tsStart_dt, tz = "UTC"),
-    tsEnd_dt = ymd_hms(tsEnd_dt, tz = "UTC")
-  ) %>%
-  filter(tsEnd_dt >= tsStart_dt)
-nrow(cleaned_backwards)
-```
-**cleaning detections that are false positives and local overlaps**
-
-Two other data problems exist:
-
-- false positives
-- local overlapping stations picking up the same individual
-
-local overlap was distinguished from false positives by comparing speed and distance. Local overalp would have:
-
-- a distance of <= 30 km between stations
-- a speed > 120 km/h
-
-...and false positives: 
-
-- any remaining detections with speeds > 120 km/h
-
-False positives were removed
-
-Local overlap detections were corrected by calculating the centroid between the two stations, replacing the coordinates with this new centroid location, recalculating the distance, replacing the name of the current station as a combination to the two stations, and for the next detection in sequence, replacing the previous station information with the new centroid information.
-
-``` {r echo = FALSE}
-
-# flag false positives 
-final_cleaned_df <- cleaned_backwards %>%
-  mutate(
-    track_status = case_when(
-      # flag as local overlapping detections with high speed and low distance
-      travelDistanceKMs <= 30 & speedKmH > 120 ~ "LOCAL_OVERLAP",
-      # flag as false positive for very high speeds 
-      speedKmH > 120                           ~ "FALSE_POSITIVE",
-      # all other flights flagged as valid
-      TRUE                                     ~ "VALID_FLIGHT"
-    )
-  ) %>%
-# arrange chronologically
-  arrange(tagDeployID, tsStart_dt) %>%
-  group_by(tagDeployID) %>%
-  
-  # Calculate midpoints for local overlaps
-  mutate(
-    lon = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lon_previous), 
-                  (lon + lon_previous) / 2, lon),
-    lat = if_else(track_status == "LOCAL_OVERLAP" & !is.na(lat_previous), 
-                  (lat + lat_previous) / 2, lat),
-    stationName = if_else(
-      track_status == "LOCAL_OVERLAP", 
-      paste0(previousStationName, " & ", stationName), 
-      stationName
-    )
-  ) %>%
-  
-  # arrange chronologically
-  arrange(tagDeployID, tsStart_dt) %>%
-  group_by(tagDeployID) %>%
-  
-  # calculate centroids using geosphere
-  mutate(
-    centroid = if_else(
-      track_status == "LOCAL_OVERLAP" & !is.na(lon_previous),
-      #centroid requires a matrix
-      geosphere::midPoint(cbind(lon_previous, 
-                                lat_previous), 
-                          cbind(lon, lat)),
-      cbind(lon, lat)
-    ),
-    lon = centroid[, 1],
-    lat = centroid[, 2],
-    
-    stationName = if_else(
-      track_status == "LOCAL_OVERLAP", 
-      paste0(previousStationName, " & ", stationName), 
-      stationName
-    )
-  ) %>%
-  select(-centroid) %>% # remove temporary matrix column
-  
-  # Put centroid coordinates to the next sequential row
-  mutate(
-    follows_overlap = lag(track_status == "LOCAL_OVERLAP", 
-                          default = FALSE),
-    
-    previousStationName = if_else(follows_overlap, 
-                                  lag(stationName), 
-                                  previousStationName),
-    previousStationID   = if_else(follows_overlap, 
-                                  lag(stationID), 
-                                  previousStationID),
-    lon_previous        = if_else(follows_overlap, 
-                                  lag(lon), 
-                                  lon_previous),
-    lat_previous        = if_else(follows_overlap, 
-                                  lag(lat), 
-                                  lat_previous),
-    
-    # Update track_status 
-    track_status = if_else(follows_overlap & 
-                             track_status == "VALID_FLIGHT", 
-                           "LOCAL_OVERLAP_RESOLVED", 
-                           track_status)
-  ) %>%
-  
-  # Remove the duplicate row, unless it is the only one
-  filter(track_status != "LOCAL_OVERLAP" | lead(follows_overlap, 
-                                                default = FALSE) == FALSE) %>%
-  
-  # Recalculate distances for the centroids
-  mutate(
-    distance_km = if_else(
-      follows_overlap,
-      geosphere::distHaversine(cbind(lon_previous, 
-                                     lat_previous), 
-                               cbind(lon, lat)) / 1000,
-      distance_km
-    )
-  ) %>%
-  select(-follows_overlap) %>% 
-  ungroup()
-
-table(final_cleaned_df$track_status)
-```
-
-Number of detections after removing false positives and resolving local overlap
-```{r echo = FALSE}
-nrow(final_cleaned_df)
-```
 
 ## Flight information added
 
@@ -386,49 +79,9 @@ Information about each individual was added including:
   - whether the tagging location was inside or outside the GLWS
   - how far from the boundary and the closest lake shoreline the tagging location was
 
-## Data Flags
-
-There are two columns of data flags 
-
-1) Valid Distance:
-- for station pairs that are < 30 km apart = FALSE_LESS
-- for station pairs that are > 965 km apart = FALSE_MORE
-
-Pairs that are close together are likely local overlaps
-Pairs that are too far apart are likely false positives 
-
-``` {r echo = FALSE}
-animalFlags <- read.csv("StationPairsFiltered.csv")
-
-table(animalFlags$valid_distance)
-```
-
-
-2) Tagging location flags for spring phenology
-- if the tagging location is within the GLWS = Flag_1
-- if the tagging location is within the GLWS and far inland >5 km = Flag_2
-- if the tagging location is within the GLWS and not during migration (was tagged in summer or winter) = Flag_3 
-- if the tagging location information is missing = Flag_4
-
-These are flagged to be investigated as potential issues for assessing spring arrival phenology
-
-```{r echo = FALSE}
-animalFlags <- read.csv("StationPairsFiltered.csv")
-
-table(animalFlags$tagSite_Flags)
-```
-
 ## Spring phenology
 
-**filter by spring season and remove problematic tagging site flags**
-
-Keep only observations that:
-
-- occurred in spring
-- had no tagging site flags
-- or were Flag_1 (within the GLWS but <5 km from the shoreline)
-
-**Number of detections**
+**Number of detections during spring**
 
 ``` {r echo = FALSE}
 
@@ -436,9 +89,7 @@ fullData <- read.csv ("StationPairsFiltered.csv")
 
 springData <- fullData %>% 
   filter(
-    season == "Spring Migration",
-    tagSite_Flags %in% c("None", "Flag_1"),
-    current_in_GLWS == "TRUE"
+    season == "Spring Migration"
   )
 nrow(springData)
 ```
@@ -453,265 +104,24 @@ length(unique(springData$species))
 length(unique(springData$tagDeployID))
 ```
 
-**Table of first arrival date by speices, subbbasin and year**
-``` {r echo = FALSE}
-
-springTable.wide <- springData %>% 
-  mutate(tsStart_dt = as_datetime(tsStart_dt, tz = "GMT"),
-         subbasin = if_else(subbasin == "geo_bay", "lk_huron", subbasin)) %>%
-  group_by(species, subbasin, year_start) %>% 
-  summarise(
-    first_arrival = format(as.Date(min(tsStart_dt)), "%m-%d"),
-    .groups = "drop"
-  ) %>%
-  arrange(year_start) %>% 
-  pivot_wider(
-    names_from = year_start, 
-    values_from = first_arrival
-  )
-
-datatable(springTable.wide)
-```
-
 ### Spring Arrival Phenology by Subbasin Plots
 
 ``` {r echo = FALSE}
+fullData <- read.csv ("StationPairsFiltered.csv")
+
+springData <- fullData %>% 
+  filter(
+    season == "Spring Migration",
+  )
+nrow(springData)
 
 springTable <- springData %>%  
   mutate(
-    tsStart_dt = as_datetime(tsStart_dt, tz = "GMT"),
+    tsEnd_dt = as_datetime(tsEnd_dt, tz = "GMT"),
+    # merging georgian bay with lake huron so they are not separate. 
     subbasin = if_else(subbasin == "geo_bay", "lk_huron", subbasin)
-  ) %>%
-  group_by(species, subbasin, year_start) %>%  
-  summarise(
-    first_arrival = min(tsStart_dt),
-    .groups = "drop"
   )
 
-# Define clean display names for titles
-subbasin_names <- c(
-  "lk_ont"   = "Lake Ontario",
-  "lk_erie"  = "Lake Erie",
-  "lk_huron" = "Lake Huron",
-  "lk_sup"   = "Lake Superior",
-  "lk_mich"  = "Lake Michigan"
-)
-
-subbasin_list <- subbasin_list <- c("lk_erie", 
-                                    "lk_ont", 
-                                    "lk_mich", 
-                                    "lk_huron", 
-                                    "lk_sup")
-
-for (target_subbasin in subbasin_list) {
-  
-  clean_title <- if_else(
-    target_subbasin %in% names(subbasin_names), 
-    subbasin_names[target_subbasin], 
-    target_subbasin
-  )
-  
-  spring_normalised <- springTable %>%
-    filter(subbasin == target_subbasin) %>%
-    filter(!is.na(first_arrival)) %>% 
-    mutate(
-      dummy_date = as.Date(format(first_arrival, "2026-%m-%d")),
-      julian_day = yday(first_arrival),
-      arrival_year = format(first_arrival, "%Y")
-    )
-  
-  if (nrow(spring_normalised) == 0) next
-  
-  subbasin_data <- spring_normalised %>%
-    group_by(species) %>%
-    summarise(
-      earliest = min(dummy_date),
-      latest   = max(dummy_date),
-      record_count = n(),
-      .groups = "drop"
-    ) %>%
-    mutate(
-      latest_visual = if_else(record_count == 1, earliest + days(1), latest)
-    ) %>%
-    arrange(earliest, species) %>%
-    mutate(
-      row_num = row_number(),
-      stripe_group = if_else(row_num %% 2 == 0, "Even", "Odd"),
-      species = factor(species, levels = unique(species))
-    )
-  
-  spring_normalised <- spring_normalised %>%
-    left_join(select(subbasin_data, 
-                     species, 
-                     stripe_group), 
-              by = "species") %>%
-    mutate(species = factor(species, 
-                            levels = levels(subbasin_data$species)))
-
-
-  p <- ggplot() + 
-    geom_segment(
-      data = subbasin_data,
-      aes(x = earliest, 
-          xend = latest_visual, 
-          y = species,
-          yend = species, 
-          colour = stripe_group), 
-      linewidth = 4, 
-      alpha = 0.25,
-      show.legend = FALSE
-    ) +
-    geom_point(
-      data = spring_normalised,
-      aes(x = dummy_date, 
-          y = species, 
-          colour = stripe_group),
-      size = 2.5,
-      alpha = 0.9,
-      show.legend = FALSE
-    ) +
-    geom_text_repel(
-      data = spring_normalised,
-      aes(x = dummy_date, 
-          y = species, 
-          label = arrival_year),
-      size = 2.2,                  
-      color = "black",             
-      segment.size = 0.2,          
-      segment.color = "grey50",
-      direction = "both",          
-      max.overlaps = 50            
-    ) +
-    scale_color_manual(values = c("Odd" = "#631D76", 
-                                  "Even" = "#62A87C")) +
-    scale_x_date(
-      date_labels = "%b %d", 
-      date_breaks = "1 week",
-      date_minor_breaks = "1 day"
-    ) +
-    labs(
-      title = paste("Spring Arrival Phenology -", clean_title), 
-      x = NULL,
-      y = NULL,
-    ) +
-    theme_minimal() +
-    theme(
-      panel.grid.major.y = element_line(colour = "grey92", 
-                                        linewidth = 0.3), 
-      panel.grid.minor.x = element_blank(), 
-      panel.grid.major.x = element_line(colour = "grey90", 
-                                        linewidth = 0.4), 
-      axis.line.x = element_line(colour = "grey50", 
-                                 linewidth = 0.5),      
-      axis.line.y = element_line(colour = "grey50", 
-                                 linewidth = 0.5),
-      axis.ticks.x = element_line(colour = "grey50",
-                                  linewidth = 0.5),
-      axis.ticks.length.x = unit(0.15, "cm"),
-      axis.text.y = element_text(size = 8, 
-                                 face = "italic", 
-                                 colour = "black"), 
-      axis.text.x = element_text(angle = 45, 
-                                 hjust = 1, 
-                                 colour = "black")
-    )
- print(p)
-}
-```
-
-### map of first arrival points
-can toggle on the flight paths, and the stations by subbasin
-```{r echo = FALSE}
-first_arrival_paths <- springData %>%
-  mutate(
-    tsStart_dt = as_datetime(tsStart_dt, 
-                             tz = "GMT"),
-    subbasin = if_else(subbasin == "geo_bay", 
-                       "lk_huron", subbasin)
-  ) %>%
-  semi_join(springTable, 
-            by = c("species", 
-                   "subbasin", 
-                   "year_start", 
-                   "tsStart_dt" = "first_arrival")) 
-
-# separate current and previous station coords
-pts_previous <- st_as_sf(first_arrival_paths, 
-                         coords = c("lon_previous", 
-                                    "lat_previous"), 
-                         crs = 4326)
-pts_current  <- st_as_sf(first_arrival_paths, 
-                         coords = c("lon", 
-                                    "lat"), 
-                         crs = 4326)
-
-# make the paths, setting to TRUE goes by row not distance
-paths_first_arrival.sf <- pts_previous %>% 
-  mutate(geometry = st_nearest_points(st_geometry(pts_previous), 
-                                      st_geometry(pts_current), 
-                                      pairwise = TRUE))
-#add label for mapping
-pts_prev_labeled <- pts_previous %>% mutate(location_type = "Previous")
-pts_curr_labeled <- pts_current  %>% mutate(location_type = "Current")
-
-combined_stations.sf <- bind_rows(pts_prev_labeled, 
-                                  pts_curr_labeled) %>% 
-  mutate(location_type = factor(location_type, 
-                                levels = c("Previous", 
-                                           "Current"))) %>% 
-  st_as_sf()
-
-subbasin_list <- c("lk_erie", 
-                   "lk_ont", 
-                   "lk_mich", "
-                   lk_huron", 
-                   "lk_sup")
-
-final_map <- mapview()
-
-# need to loop through the subbasins so they can be toggled in map
-for (target_subbasin in subbasin_list) {
-  
-  # filter lines and stations
-  subbasin_lines <- paths_first_arrival.sf %>% 
-    filter(subbasin == target_subbasin)
-  subbasin_dots  <- combined_stations.sf %>%
-    filter(subbasin == target_subbasin)
-  
-  if (nrow(subbasin_dots) == 0) next
-  
-  # make unique names so they don't overwrite each other
-  lines_name <- paste0(target_subbasin, 
-                       " (Lines)")
-  dots_name  <- paste0(target_subbasin,
-                       " (Stations)")
-  
-  # Add lines and dots to the final map layout (hidden by default)
-  final_map <- final_map + 
-    mapview(
-      subbasin_lines, 
-      color = "black", 
-      lwd = 1.5, 
-      layer.name = lines_name,
-      hide = TRUE
-    ) + 
-    mapview(
-      subbasin_dots,
-      zcol = "location_type", 
-      #brown for previous, teal for current
-      col.regions = c("Start" = "#846C5B", "End" = "#6DD3CE"), 
-      size = 4,
-      legend = FALSE,         
-      layer.name = dots_name,
-      hide = TRUE
-    )
-}
-final_map
-```
-
-### number of basins each species is within
-
-``` {r echo = FALSE}
 species_subbasin_counts <- springTable  %>%
   group_by(species) %>%
   summarise(
@@ -720,177 +130,94 @@ species_subbasin_counts <- springTable  %>%
     basins_present = paste(sort(unique(subbasin)), 
                            collapse = ", "),
     .groups = "drop"
-  ) %>%
-  #sort sp by those in the most subbasins first
-  #then group by same subbasin combinations for those in 2-4 basins
- arrange(desc(num_subbasins), basins_present)
-
-datatable(
-  species_subbasin_counts,
-  options = list(
-    pageLength = 25, 
-    autoWidth = TRUE
   )
-)
+
 ```
-### phenology plots by number of subbasin per species
 
-species in all 5 subbasins
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=16, fig.width=11}
+library(ggplot2)
+library(ggridges)
+library(dplyr)
+library(purrr)
+library(tidyr) # Needed for complete()
 
-```{r, fig.width = 10, fig.height = 7, echo = FALSE}
-# check which species are in all 5 subbasins
-species_5_basins <- springTable %>%
-  group_by(species) %>%
-  summarise(num_subbasins = n_distinct(subbasin), 
-            .groups = "drop") %>%
-  filter(num_subbasins == 5) %>%
-  pull(species) # Makes a character vector checklist
+clean_basin_names <- c(
+  "lk_erie" = "Lake Erie",
+  "lk_huron"= "Lake Huron",
+  "lk_ont"  = "Lake Ontario",
+  "lk_sup" = "Lake Superior",
+  "lk_mich" = "Lake Michigan")
 
-subbasin_order <- c("lk_erie", 
-                    "lk_ont", 
-                    "lk_mich", 
-                    "lk_huron", 
-                    "lk_sup")
-
-#filter by those species
-phenology_data <- springTable %>%
-  filter(species %in% species_5_basins) %>%
-  filter(!is.na(first_arrival)) %>%
+#summarize original raw counts
+all_basins_plot_data <- springTable %>%
   mutate(
-    # Normalize the dates so they align on xaxis
-    dummy_date = as.Date(format(first_arrival, "2026-%m-%d")),
-    arrival_year = format(first_arrival, "%Y"),
-    subbasin = factor(subbasin, levels = subbasin_order),
-    subbasin_num = as.numeric(subbasin)
-  )
-
-#order by earliest arriving species
-species_order <- phenology_data %>%
-  group_by(species) %>%
-  summarise(global_earliest = min(dummy_date)) %>%
-  arrange(global_earliest) %>%
-  pull(species)
-
-phenology_data <- phenology_data %>%
-  mutate(
-    species = factor(species, 
-                     levels = species_order),
-    species_idx = as.numeric(species),
-    y_offset = species_idx + (subbasin_num - 3) * 0.15 #prevent overlap
+    month_day = format(tsEnd_dt, "%m-%d"),
+    date = as.Date(paste0("2026-", 
+                          month_day))
   ) %>%
-  group_by(species, subbasin) %>%
-  mutate(
-    earliest = min(dummy_date),
-    latest = max(dummy_date),
-    record_count = n(),
-    # If a species only has 1 record add a day so it is plotted
-    latest_visual = if_else(record_count == 1, 
-                            earliest + days(1), 
-                            latest)
-  ) %>%
+  filter(!is.na(subbasin), 
+         subbasin != "") %>%
+  group_by(subbasin, 
+           species, 
+           date) %>%
+  summarise(count = n(),
+            .groups = "drop")
+
+# get start and end dates
+start_date <- min(all_basins_plot_data$date, na.rm = TRUE)
+end_date   <- max(all_basins_plot_data$date, na.rm = TRUE)
+
+#fills in missing times s
+completed_data <- all_basins_plot_data %>%
+  group_by(subbasin, species) %>%
+  complete(date = seq.Date(start_date,
+                           end_date, 
+                           by = "1 day"), 
+           fill = list(count = 0)) %>%
   ungroup()
 
-# make the plot
-subbasin_colours <- c(
-  "lk_erie" = "#8AC926", 
-  "lk_ont" = "#FF595E", 
-  "lk_mich" = "#FFCA3A", 
-  "lk_huron" = "#1982c4", 
-  "lk_sup" = "#6a4c93"
-)
+subbasins_list <- unique(completed_data$subbasin)
 
-subbasin_labels <- c(
-  "lk_erie" = "Lake Erie",
-  "lk_ont" = "Lake Ontario",
-  "lk_mich" = "Lake Michigan",
-  "lk_huron" = "Lake Huron",
-  "lk_sup" = "Lake Superior"
-)
-
-ggplot(phenology_data) +
-  geom_segment(
-    aes(x = earliest, 
-        xend = latest_visual, 
-        y = y_offset, 
-        yend = y_offset, 
-        colour = subbasin), 
-    linewidth = 3.5, 
-    alpha = 0.9
-  ) +
-  # Overlay arrival points on top
-  geom_point(
-    aes(x = dummy_date, 
-        y = y_offset, 
-        fill = subbasin),
-    shape = 21,
-    colour = "#404E4D",
-    stroke = 0.6,
-    size = 2.5,
-    alpha =1
-  ) +
-  scale_y_continuous(
-    breaks = 1:length(species_order),
-    labels = species_order
-  ) +
-  geom_text_repel(
-    aes(x = dummy_date, y = y_offset, label = arrival_year),
-    size = 2.2,
-    color = "grey15",
-    box.padding = 0.15,
-    point.padding = 0.1,
-    segment.size = 0.15,
-    segment.color = "grey70",
-    direction = "y", 
-    max.overlaps = 50
-  ) +
-  # Colour palette matching your subbasins
-  scale_colour_manual(
-    values = subbasin_colours,
-    labels = subbasin_labels,
-    name = "subbasins"
-  ) +
-  scale_fill_manual(
-    values = subbasin_colours,
-    guide = "none"
-  )+
-  scale_x_date(
-    date_labels = "%b %d", 
-    date_breaks = "1 week",
-    date_minor_breaks = "1 day"
-  ) +
-  labs(
-    title = "Spring phenology for species in all 5 subbasins",
-    x = NULL, 
-    y = NULL
-  ) +
-  theme_minimal() +
-  theme(
-    plot.margin = margin(t = 0.5, 
-                         r = 0.5, 
-                         b = 1.5, 
-                         l = 0.5, 
-                         unit = "cm"),
-    panel.grid.major.y = element_line(colour = "grey92", 
-                                      linewidth = 0.3), 
-    panel.grid.minor.x = element_blank(), 
-    panel.grid.major.x = element_line(colour = "grey90", 
-                                      linewidth = 0.4), 
-    axis.line.x = element_line(colour = "grey50", 
-                               linewidth = 0.5),      
-    axis.line.y = element_line(colour = "grey50", 
-                               linewidth = 0.5),
-    axis.ticks.x = element_line(colour = "grey50", 
-                                linewidth = 0.5),
-    axis.ticks.length.x = unit(0.15, 
-                               "cm"),
-    legend.position = "bottom",
-    axis.text.y = element_text(size = 9, 
-                               face = "italic", 
-                               colour = "black"), 
-    axis.text.x = element_text(angle = 45, 
-                               hjust = 1, 
-                               colour = "black"),
-    plot.title = element_text(face = "bold", 
-                              size = 14)
-  )
+# loop plots
+walk(subbasins_list, 
+     function(basin_code) {
+  
+  single_basin_data <- completed_data %>% 
+    filter(subbasin == basin_code)
+  
+  if (nrow(single_basin_data) == 0) return(NULL)
+  
+  proper_name <- clean_basin_names[basin_code]
+  if (is.na(proper_name)) proper_name <- toupper(basin_code)
+  
+  # plotting
+  p <- ggplot(single_basin_data, 
+              aes(x = date, 
+                  y = species, 
+                  height = count, 
+                  fill = species)) +
+    geom_ridgeline(scale = 0.5, 
+                   alpha = 0.6, 
+                   color = "grey85",) +
+        geom_hline(yintercept = unique(single_basin_data$species), 
+               color = "grey85",
+               size = 0.4) +
+    
+    scale_x_date(date_labels = "%b %d", 
+                 date_breaks = "2 weeks") +
+    
+    theme_ridges() +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(size = 14, face = "bold"),
+      axis.text.y = element_text(size = 14, hjust = 1, vjust = 0.5)
+    ) +
+    labs(
+      title = paste0("Spring Phenology: ", proper_name),
+      x = "Date", 
+      y = NULL
+    )
+  
+  print(p)
+})
 ```
