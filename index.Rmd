@@ -27,6 +27,7 @@ library(ggrepel)
 library(sfheaders)
 library(ggridges)
 library(plotly)
+library(terra)
 
 Sys.setenv(TZ = "UTC") 
 
@@ -176,6 +177,16 @@ completed_data <- all_basins_plot_data %>%
            fill = list(count = 0)) %>%
   ungroup()
 
+# order species by first detection date (earliest to latest)
+completed_data <- completed_data %>%
+  group_by(species) %>%
+  mutate(
+    first_arrival = min(date[count > 0], na.rm = TRUE),
+    first_arrival = if_else(is.infinite(first_arrival), end_date, first_arrival)
+  ) %>%
+  ungroup() %>%
+  mutate(species = reorder(species, desc(first_arrival)))
+
 subbasins_list <- unique(completed_data$subbasin)
 
 # loop plots
@@ -221,3 +232,69 @@ walk(subbasins_list,
   print(p)
 })
 ```
+
+## Detection heatmap
+
+``` {r, echo = FALSE}
+library(stars)
+library(mapview)
+
+# count detections by station coordinates
+station_counts <- springTable %>% 
+  group_by(lon,
+           lat) %>% 
+  summarize(total_detections = n(),
+            .groups = "drop")
+
+#weight stations higher if they have more detections
+weighted_points <- station_counts %>% 
+  uncount(total_detections)
+
+# calculate kernel density
+kde_calc <- MASS::kde2d(
+  x = weighted_points$lon, 
+  y = weighted_points$lat, 
+  n = 600, 
+  h = c(1, 1),
+  lims = c(
+    min(station_counts$lon) - 0.5, 
+    max(station_counts$lon) + 0.5,
+    min(station_counts$lat) - 0.5, 
+    max(station_counts$lat) + 0.5
+  )
+)
+
+#convert to raster
+kde_raster <- stars::st_as_stars(
+  list(density = kde_calc$z),
+  dimensions = stars::st_dimensions(
+    x = kde_calc$x, 
+    y = kde_calc$y, 
+    cell_midpoints = TRUE
+  )
+)
+#assign crfs
+sf::st_crs(kde_raster) <- 4326
+
+#prevents very small values from blocking out map
+kde_raster[kde_raster < (max(kde_raster[[1]], 
+                             na.rm = TRUE) * 0.02)] <- NA
+
+# make a colour palette
+thermal_palette <- colorRampPalette(c("blue", 
+                                      "cyan", 
+                                      "green", 
+                                      "yellow", 
+                                      "orange", 
+                                      "red"))(100)
+
+# plot with mapview
+mapview(
+  kde_raster,
+  col.regions = thermal_palette,
+  alpha.regions = 0.65,
+  na.color = "transparent",
+  legend = TRUE,
+  layer.name = "Detection Density",
+  map.types = c("CartoDB.Positron", "OpenStreetMap")
+)
