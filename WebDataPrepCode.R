@@ -226,37 +226,44 @@ str(cleaned_backwards) #27309
 #===============================================================
 
 flightInfo_df <- cleaned_backwards %>%
-  # sort by individual and in chronological order
-  arrange(tagDeployID,
-          tsEnd_dt) %>%
+  arrange(tagDeployID, tsEnd_dt) %>%
   group_by(tagDeployID) %>%
   mutate(
-    new_flight = row_number() == 1 | movement_duration_hours > 12,
-    flight_number = cumsum(new_flight),
-    flight_ID = paste0("Flight_", 
-                       flight_number)
+    flight_type = if_else(movement_duration_hours > 12, 
+                          "incidence", 
+                          "flight"),
+    
+    # Flag start of new flight or put incidence
+    is_new_flight = flight_type == "flight" & 
+      (row_number() == 1 | lag(flight_type) == "incidence"),
+    
+    # Track flight sequence numbers
+    flight_number = cumsum(is_new_flight),
+    
+    flight_ID = if_else(
+      flight_type == "incidence",
+      "incidence",
+      paste0("Flight_", flight_number)
+    )
   ) %>%
-  # Regroup by animal AND flight number for step and angle math
-  group_by(tagDeployID, flight_number) %>%
+  group_by(tagDeployID, flight_ID) %>%
   mutate(
     step_speed_kmh = if_else(travelDurationHours > 0, 
                              distance_km / travelDurationHours, 
                              0),
-    current_bearing = geosphere::bearing(cbind(lon_previous, 
-                                               lat_previous),
-                                         cbind(lon, 
-                                               lat)),
+    current_bearing = bearing(cbind(lon_previous, lat_previous),
+                              cbind(lon, lat)),
     next_bearing = lead(current_bearing),
     turning_angle = next_bearing - current_bearing,
     turning_angle = (turning_angle + 180) %% 360 - 180
   ) %>%
   ungroup() %>%
   mutate(
-    # Ensure all date-time objects are created first
+    # Convert date-time strings
     tsStart_posix = ymd_hms(tsStart_dt),
-    tsEnd_posix = ymd_hms(tsEnd_dt),
+    tsEnd_posix   = ymd_hms(tsEnd_dt),
     sunrise_posix = ymd_hms(sunrise_local),
-    sunset_posix = ymd_hms(sunset_local),
+    sunset_posix  = ymd_hms(sunset_local),
     
     # Classify diel period
     diel_period = case_when(
@@ -266,7 +273,7 @@ flightInfo_df <- cleaned_backwards %>%
       TRUE ~ "mixed"
     ),
     
-    # Calculate hour gaps (kept inside the same mutate block)
+    # Calculate hour gaps
     hours_from_sunset  = as.numeric(abs(difftime(tsEnd_posix, 
                                                  sunset_posix, 
                                                  units = "hours"))),
@@ -274,22 +281,24 @@ flightInfo_df <- cleaned_backwards %>%
                                                  sunrise_posix, 
                                                  units = "hours"))),
     
-    # Add nearSun column
+    # Near sun classification
     nearSun = case_when(
       hours_from_sunset <= 1  ~ "sunset",
       hours_from_sunrise <= 1 ~ "sunrise",
       TRUE                    ~ "none"
     )
-  ) %>% #clean up temporary columns
-  select(-current_bearing, 
-         -next_bearing,
-         -tsEnd_posix,
-         -tsStart_posix, 
-         -sunrise_posix, 
-         -sunset_posix, 
-         -hours_from_sunset,
-         -hours_from_sunrise)
-
+  ) %>%
+  # Clean up temporary calculations
+  select(
+    -current_bearing, 
+    -next_bearing,
+    -tsEnd_posix,
+    -tsStart_posix, 
+    -sunrise_posix, 
+    -sunset_posix, 
+    -hours_from_sunset,
+    -hours_from_sunrise
+  )
 # adding the subbasin information to the dataframe
 #needs to be done separately for current vs previous station
 
