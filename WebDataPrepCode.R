@@ -27,6 +27,8 @@ data_OH <- read.csv("./StationDownloads/Motus-data-region-US-OH_detections_downl
 data_IN <- read.csv("./StationDownloads/Motus-data-region-US-IN_detections_downloaded-2026-06-23.csv")
 data_IL <- read.csv("./StationDownloads/Motus-data-region-US-IL_detections_downloaded-2026-06-23.csv")
 data_WI <- read.csv("./StationDownloads/Motus-data-region-US-WI_detections_downloaded-2026-06-23.csv")
+data_MI <- read.csv("./StationDownloads/Motus-data-region-US-MI_detections_downloaded-2026-07-23.csv")
+data_MN <- read.csv("./StationDownloads/Motus-data-region-US-MN_detections_downloaded-2026-07-23.csv")
 
 # join all the station data 
 data_raw <- bind_rows(data_ON,
@@ -35,7 +37,9 @@ data_raw <- bind_rows(data_ON,
                       data_OH,
                       data_IN,
                       data_IL,
-                      data_WI) %>%  # some rows have it some do not
+                      data_WI,
+                      data_MI,
+                      data_MN) %>%  
   distinct() 
 
 # Format the date columns using lubridate functions
@@ -142,7 +146,7 @@ write_csv(data_obs, "observationSummary.csv")
 # station pair filtering column creation for later filtering
 #===================================================================
 
-station_pairs <- read.csv("observationSummary.csv") #142303 obs
+station_pairs <- read.csv("observationSummary.csv") #147043 obs
 str(station_pairs)
 
 #filter out same station pairs and station unknown
@@ -154,7 +158,7 @@ filtered_pairs <- station_pairs %>%
     previousStationName != "Unknown station"
   )
 str(filtered_pairs)
-#94643 obs
+#97441 obs
 
 #loading great lakes watershed polygon, contains subbasins for each lake
 GLWatershed <- st_read("./greatlakes_subbasins/greatlakes_subbasins.shp")
@@ -199,14 +203,13 @@ filtered_df <- filtered_pairs %>%
     # Keep if either the current OR the previous station is in GLWS
     (current_in_GLWS | previous_in_GLWS))
 
-str(filtered_df) #35865  obs
+str(filtered_df) #36837  obs
 
 filtered_df$flight <- ifelse(filtered_df$movement_duration_hours < 12,
                              "flight",
                              "incidence") 
 
 write_csv(filtered_df, "StationPairsFiltered.csv")
-#35865 obs
 
 #====================================================================
 # Removing observations where tsStart is after tsEnd
@@ -218,7 +221,7 @@ cleaned_backwards <- filtered_df %>%
   ) %>%
   filter(tsEnd_dt >= tsStart_dt)
 
-str(cleaned_backwards) #27309
+str(cleaned_backwards) #28018
 
 
 # =============================================================
