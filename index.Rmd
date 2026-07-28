@@ -37,17 +37,26 @@ Sys.setenv(TZ = "UTC")
 ```
 
 ## key migration areas
-### all flights
+### all spring flights
 
 
 ```{r}
 #| label: fig-movement-map
-#| fig-cap: "Relative Movement Density (Sigma 10 km)"
 #| echo: false
 #| message: false
 #| warning: false
 
 knitr::include_graphics("AllFlightsMovementDensity.png")
+```
+
+### Spring flights from individuals tagged outside of the GLWS
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+knitr::include_graphics("LineKDE_TaggedOut.png")
 ```
 
 Overview of the data from Motus Project #1 summary data (downloaded off the web). 
