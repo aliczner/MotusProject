@@ -41,12 +41,20 @@ Sys.setenv(TZ = "UTC")
 
 
 ```{r}
-#| label: fig-movement-map
 #| echo: false
 #| message: false
 #| warning: false
 
 knitr::include_graphics("AllFlightsMovementDensity.png")
+```
+
+### The core spring flights only using Fisher-Jenks Natural Breaks
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+knitr::include_graphics("LineKDEAllFlightsCore.png")
 ```
 
 ### Spring flights from individuals tagged outside of the GLWS
@@ -56,8 +64,19 @@ knitr::include_graphics("AllFlightsMovementDensity.png")
 #| message: false
 #| warning: false
 
+knitr::include_graphics("LineKDETagOutCore.png")
+```
+
+### Core spring flights from individuals tagged outside of the GLWS
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
 knitr::include_graphics("LineKDE_TaggedOut.png")
 ```
+
 
 Overview of the data from Motus Project #1 summary data (downloaded off the web). 
 

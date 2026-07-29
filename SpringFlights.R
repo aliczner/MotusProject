@@ -176,9 +176,40 @@ crs(density_data.rast) <- "EPSG:3978"
 terra::writeRaster(density_data.rast, "Raw_flights_all.tif", 
                    overwrite=T)
 
-#=============================================
+#Applying Fisher-Jenks natural breaks to get the core corridors from the kde
+# Extract non-zero flights
+vals <- values(density_data.rast, mat = FALSE, na.rm = TRUE)
+vals <- vals[vals > 0]
+
+#compute Fisher natural breaks (4 classes)
+set.seed(42)
+sample_vals <- sample(vals, size = min(20000, length(vals)))
+fisher_res  <- classIntervals(sample_vals, n = 4, style = "fisher")
+
+# Extract the threshold boundary separating background noise from core tracks
+bright_cutoff <- fisher_res$brks[2] 
+
+# remove anything below the cutoff to NA
+r_core_bright <- density_data.rast
+r_core_bright[density_data.rast < bright_cutoff] <- NA
+
+# Scale display layer, small decimals mess up the legend
+r_display <- r_core_bright * 10000
+
+# Extract non-NA values to set quantile breaks across retained pixels
+vals_disp <- values(r_display, na.rm = TRUE)
+q_breaks  <- quantile(vals_disp, probs = seq(0, 1, length.out = 8))
+
+mapview(r_display, 
+        at = q_breaks,
+        col.regions = inferno(7), 
+        alpha.regions = 0.6,
+        na.color = "transparent",
+        layer.name = "Core Movement Corridors")
+
+#=================================================
 # line kernel density - tagging outside GLWS
-#============================================
+#=================================================
 flight_steps.sf <- flight_steps %>%
   filter(!is.na(lon_tagSite) & !is.na(lat_tagSite)) %>%
   st_as_sf(
@@ -262,3 +293,42 @@ mapview(
   r_index,
   col.regions = viridis::inferno(100)
 )
+
+#Applying Fisher-Jenks natural breaks similar to above
+# Extract non-zero flights
+tagoutvals <- values(tagout.rast, mat = FALSE, na.rm = TRUE)
+tagoutvals <- tagoutvals[tagoutvals > 0]
+
+#compute Fisher natural breaks (4 classes)
+set.seed(10)
+tagoutsample_vals <- sample(tagoutvals, 
+                            size = min(20000, 
+                                       length(tagoutvals)))
+tagoutfisher_res  <- classIntervals(tagoutsample_vals, 
+                                    n = 6, 
+                                    style = "fisher")
+
+# Extract the threshold boundary separating background noise from core tracks
+cutoff <- tagoutfisher_res$brks[2] 
+
+# remove anything below the cutoff to NA
+r_core_only <- tagout.rast
+r_core_only[tagout.rast < cutoff] <- NA
+
+# Scale display layer, small decimals mess up the legend
+tagout_display <- r_core_only * 10000
+
+# Extract non-NA values to set quantile breaks across retained pixels
+tagoutvals_disp <- values(tagout_display, 
+                          na.rm = TRUE)
+tagoutq_breaks  <- quantile(tagoutvals_disp, 
+                            probs = seq(0, 1, 
+                                        length.out = 8))
+
+mapview(tagout_display, 
+        at = tagoutq_breaks,
+        col.regions = inferno(7), 
+        alpha.regions = 0.6,
+        na.color = "transparent",
+        maxpixels = ncell(tagout_display),
+        layer.name = "Core Movement Corridors")
