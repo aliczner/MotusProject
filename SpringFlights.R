@@ -332,3 +332,61 @@ mapview(tagout_display,
         na.color = "transparent",
         maxpixels = ncell(tagout_display),
         layer.name = "Core Movement Corridors")
+
+#==================================================================
+# Multispeices Line Kernel Density Estimation Overlay
+#===================================================================
+library(terra)
+library(sf)
+library(dplyr)
+library(purrr)
+
+#Make the same extent for all species
+regionTemplate <- rast(ext(flight_lines.pj), 
+                       resolution = 5000, 
+                       crs = st_crs(flight_lines.pj)$wkt)
+
+# make line-KDE per species
+species_rasters <- flight_lines.pj %>%
+  split(.$species) %>%
+  imap(function(df_sp, sp_name) {
+    
+    # Calculate line length per cell (returns NA for empty cells)
+    flightsRast <- rasterizeGeom(vect(df_sp), 
+                                 regionTemplate, 
+                                 fun = "length")
+    
+    # Replace NA values in empty cells with 0
+    flightsRast <- subst(flightsRast, NA, 0)
+    
+    weightMatrix <- focalMat(flightsRast, 
+                             d = 10000, 
+                             type = "Gauss") 
+    kdeSurface <- focal(flightsRast, 
+                        w = weightMatrix, 
+                        fun = sum, 
+                        na.rm = TRUE)
+    #normalize across species
+    r_min <- min(values(kdeSurface, na.rm = TRUE))
+    r_max <- max(values(kdeSurface, na.rm = TRUE))
+    
+    if(r_max > r_min) {
+      r_norm <- (kdeSurface - r_min) / (r_max - r_min)
+    } else {
+      r_norm <- kdeSurface * 0 #in case of div by zero change values to zero
+    }
+    
+    return(r_norm)
+  })
+
+# stack all the species rasters
+stack_multispecies <- rast(species_rasters)
+
+# sum all the layers
+stacked_cooccurrence <- app(stack_multispecies, 
+                            fun = sum, 
+                            na.rm = TRUE)
+
+mapview(stacked_cooccurrence,
+        col.regions = viridis::inferno(100),
+        na.color = "transparent")

@@ -37,8 +37,18 @@ Sys.setenv(TZ = "UTC")
 ```
 
 ## key migration areas
-### all spring flights
 
+### Multispeices Line Kernel Density Estimation Overlay
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+knitr::include_graphics("StackedCooccurrenceLKDE.png")
+
+```
+
+### all spring flights
 
 ```{r}
 #| echo: false
@@ -57,7 +67,7 @@ knitr::include_graphics("AllFlightsMovementDensity.png")
 knitr::include_graphics("LineKDEAllFlightsCore.png")
 ```
 
-### Spring flights from individuals tagged outside of the GLWS
+### Core spring flights from individuals tagged outside of the GLWS
 
 ```{r}
 #| echo: false
@@ -67,8 +77,7 @@ knitr::include_graphics("LineKDEAllFlightsCore.png")
 knitr::include_graphics("LineKDETagOutCore.png")
 ```
 
-### Core spring flights from individuals tagged outside of the GLWS
-
+### Spring flights from individuals tagged outside of the GLWS
 ```{r}
 #| echo: false
 #| message: false
