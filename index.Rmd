@@ -38,7 +38,12 @@ Sys.setenv(TZ = "UTC")
 
 ## key migration areas
 
-### Multispeices Line Kernel Density Estimation Overlay
+### Kernel density estimation on a raster grid for spring flights
+
+A KDE was made for each species, then they were stacked and summed
+not quite a line KDE method, but this preserves species and is less memory intensive
+
+2.5 km resolution, 5 km bandwidth (too memory intensive to go finer)
 ```{r}
 #| echo: false
 #| message: false
@@ -48,7 +53,9 @@ knitr::include_graphics("StackedCooccurrenceLKDE.png")
 
 ```
 
-### all spring flights
+### Line KDE of all flights in spring
+
+more exact flight paths (1 km resolution, 10 km bandwidth)
 
 ```{r}
 #| echo: false
@@ -56,36 +63,8 @@ knitr::include_graphics("StackedCooccurrenceLKDE.png")
 #| warning: false
 
 knitr::include_graphics("AllFlightsMovementDensity.png")
+
 ```
-
-### The core spring flights only using Fisher-Jenks Natural Breaks
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-
-knitr::include_graphics("LineKDEAllFlightsCore.png")
-```
-
-### Core spring flights from individuals tagged outside of the GLWS
-
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-
-knitr::include_graphics("LineKDETagOutCore.png")
-```
-
-### Spring flights from individuals tagged outside of the GLWS
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-
-knitr::include_graphics("LineKDE_TaggedOut.png")
-```
-
 
 Overview of the data from Motus Project #1 summary data (downloaded off the web). 
 

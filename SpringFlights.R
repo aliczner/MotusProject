@@ -340,53 +340,109 @@ library(terra)
 library(sf)
 library(dplyr)
 library(purrr)
+library(mapview)
 
-#Make the same extent for all species
+# create a blank template of 5 km for the region
 regionTemplate <- rast(ext(flight_lines.pj), 
-                       resolution = 5000, 
+                       resolution = 2500, 
                        crs = st_crs(flight_lines.pj)$wkt)
 
-# make line-KDE per species
-species_rasters <- flight_lines.pj %>%
-  split(.$species) %>%
-  imap(function(df_sp, sp_name) {
-    
-    # Calculate line length per cell (returns NA for empty cells)
-    flightsRast <- rasterizeGeom(vect(df_sp), 
-                                 regionTemplate, 
-                                 fun = "length")
-    
-    # Replace NA values in empty cells with 0
-    flightsRast <- subst(flightsRast, NA, 0)
-    
-    weightMatrix <- focalMat(flightsRast, 
-                             d = 10000, 
-                             type = "Gauss") 
-    kdeSurface <- focal(flightsRast, 
-                        w = weightMatrix, 
-                        fun = sum, 
-                        na.rm = TRUE)
-    #normalize across species
-    r_min <- min(values(kdeSurface, na.rm = TRUE))
-    r_max <- max(values(kdeSurface, na.rm = TRUE))
-    
-    if(r_max > r_min) {
-      r_norm <- (kdeSurface - r_min) / (r_max - r_min)
-    } else {
-      r_norm <- kdeSurface * 0 #in case of div by zero change values to zero
-    }
-    
-    return(r_norm)
-  })
+# add a weighting column to account for uneven station distribution
+flight_lines_weighted <- flight_lines.pj %>%
+  mutate(weight_val = path_freq / sqrt(distance_km))
 
-# stack all the species rasters
+# get the list of species to loop through
+species_list <- unique(flight_lines_weighted$species)
+
+# loop through the species to create the rasters
+species_rasters <- lapply(species_list, 
+                          function(sp_name) {
+  
+  df_sp <- flight_lines_weighted %>% 
+    filter(species == sp_name)
+  
+  flightsRast <- rasterize(vect(df_sp), 
+                           regionTemplate, 
+                           field = "weight_val", 
+                           fun = "sum", 
+                           background = 0)
+  
+  #this is for the smoothing window
+  weightMatrix <- focalMat(flightsRast, 
+                           d = 5000, 
+                           type = "Gauss") 
+  kdeSurface <- focal(flightsRast, 
+                      w = weightMatrix, 
+                      fun = sum, 
+                      na.rm = TRUE)
+  
+  return(kdeSurface)
+})
+
+names(species_rasters) <- species_list
+
+# stack each sp raster and sum for the final mapping
 stack_multispecies <- rast(species_rasters)
-
-# sum all the layers
 stacked_cooccurrence <- app(stack_multispecies, 
                             fun = sum, 
                             na.rm = TRUE)
 
-mapview(stacked_cooccurrence,
-        col.regions = viridis::inferno(100),
-        na.color = "transparent")
+# adding log transformation for mapping
+stacked_cooccurrence_log <- app(stacked_cooccurrence, 
+                                fun = function(x) { log1p(x) })
+
+
+mapview(stacked_cooccurrence_log,
+        col.regions = viridis::inferno(256),
+        na.color = "transparent",
+        layer.name = "Core migratory areas")
+
+#=========================================================
+# Spatial network centrality
+#=========================================================
+library(sf)
+library(sfnetworks)
+library(dplyr)
+library(tidygraph)
+library(mapview)
+
+## using edge centrality to find critical flight corridors
+
+#convert flights to sfnetwork object
+flight_net <- as_sfnetwork(flight_lines.pj, 
+                      directed = TRUE)
+
+edge_centrality_all <- flight_net %>% 
+  activate("edges") %>%  #focus on edges instead of nodes
+  mutate(
+    edge_btw = centrality_edge_betweenness(weights = 1/weight_sqrt_dist))
+#weight is inverse b/c big numbers = "high resistance" I want opposite
+
+#convert the edges back to an sf object
+edges_sf <- edge_centrality_all %>%
+  activate("edges") %>%
+  st_as_sf()
+
+mapview(edges_sf, 
+        zcol = "edge_btw", 
+        lwd = 1.5, 
+        legend = TRUE)
+#that is a mess of points, try looking at the top 10%
+
+cutoff_10 <- quantile(edges_sf$edge_btw, 
+                         0.90, 
+                         na.rm = TRUE)
+
+# filter out to only the top 10%
+top_corridors <- edges_sf %>%
+  filter(edge_btw >= cutoff_10)
+
+# 3. Visualize using mapview, sizing/coloring by the weighted score
+
+mapviewOptions(vector.palette = viridis::plasma)
+
+mapview(top_corridors, 
+        zcol = "edge_btw", 
+        col.regions = magma_pal,
+        lwd = 4,                 # Makes the lines thick enough to easily see
+        legend = TRUE)
