@@ -341,6 +341,7 @@ library(sf)
 library(dplyr)
 library(purrr)
 library(mapview)
+library(stringr)
 
 # create a blank template of 5 km for the region
 regionTemplate <- rast(ext(flight_lines.pj), 
@@ -350,6 +351,21 @@ regionTemplate <- rast(ext(flight_lines.pj),
 # add a weighting column to account for uneven station distribution
 flight_lines_weighted <- flight_lines.pj %>%
   mutate(weight_val = path_freq / sqrt(distance_km))
+
+flight_lines_weighted <- flight_lines_weighted %>%
+  mutate(
+    species = case_when(
+      str_detect(species, "Yellow-rumped Warbler") ~ "Yellow-rumped Warbler",
+      str_detect(species, "Dunlin") ~ "Dunlin",
+      str_detect(species, "Dark-eyed Junco") ~ "Dark-eyed Junco",
+      str_detect(species, "Swainson's Thrush") ~ "Swainson's Thrush",
+      str_detect(species, "Short-billed Dowitcher") ~ "Short-billed Dowitcher",
+      str_detect(species, "Sharp-shinned Hawk") ~ "Sharp-shinned Hawk",
+      str_detect(species, "American Kestrel") ~ "American Kestrel",
+      str_detect(species, "Rock Pigeon") ~ "Rock Pigeon",
+      TRUE ~ species
+    )
+  )
 
 # get the list of species to loop through
 species_list <- unique(flight_lines_weighted$species)
@@ -391,58 +407,23 @@ stacked_cooccurrence <- app(stack_multispecies,
 stacked_cooccurrence_log <- app(stacked_cooccurrence, 
                                 fun = function(x) { log1p(x) })
 
+writeRaster(stack_multispecies,
+            "LKDERasterStack.tif",
+            overwrite = TRUE)
 
 mapview(stacked_cooccurrence_log,
         col.regions = viridis::inferno(256),
         na.color = "transparent",
         layer.name = "Core migratory areas")
 
-#=========================================================
-# Spatial network centrality
-#=========================================================
-library(sf)
-library(sfnetworks)
-library(dplyr)
-library(tidygraph)
-library(mapview)
+# Clean the layer names by replacing slashes with dashes or spaces
+safe_layer_names <- gsub("[/\\\\]", "-", names(stack_multispecies))
 
-## using edge centrality to find critical flight corridors
+# Log-transform the multi-species stack
+stack_multispecies_log <- log1p(stack_multispecies)
 
-#convert flights to sfnetwork object
-flight_net <- as_sfnetwork(flight_lines.pj, 
-                      directed = TRUE)
-
-edge_centrality_all <- flight_net %>% 
-  activate("edges") %>%  #focus on edges instead of nodes
-  mutate(
-    edge_btw = centrality_edge_betweenness(weights = 1/weight_sqrt_dist))
-#weight is inverse b/c big numbers = "high resistance" I want opposite
-
-#convert the edges back to an sf object
-edges_sf <- edge_centrality_all %>%
-  activate("edges") %>%
-  st_as_sf()
-
-mapview(edges_sf, 
-        zcol = "edge_btw", 
-        lwd = 1.5, 
-        legend = TRUE)
-#that is a mess of points, try looking at the top 10%
-
-cutoff_10 <- quantile(edges_sf$edge_btw, 
-                         0.90, 
-                         na.rm = TRUE)
-
-# filter out to only the top 10%
-top_corridors <- edges_sf %>%
-  filter(edge_btw >= cutoff_10)
-
-# 3. Visualize using mapview, sizing/coloring by the weighted score
-
-mapviewOptions(vector.palette = viridis::plasma)
-
-mapview(top_corridors, 
-        zcol = "edge_btw", 
-        col.regions = magma_pal,
-        lwd = 4,                 # Makes the lines thick enough to easily see
-        legend = TRUE)
+# Pass the cleaned names into mapview
+mapview(stack_multispecies_log,
+        col.regions = viridis::inferno(256),
+        na.color = "transparent",
+        layer.name = safe_layer_names)
