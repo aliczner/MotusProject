@@ -68,6 +68,10 @@ flight_lines.pj <- flight_lines.pj %>%
   ) %>% 
   ungroup()
 
+st_write(flight_lines.pj, 
+         "flight_lines.gpkg", 
+         delete_layer = TRUE)
+
 flights_psp <- as.psp(st_geometry(flight_lines.pj))
 marks(flights_psp) <- flight_lines.pj$weight_sqrt_dist
 

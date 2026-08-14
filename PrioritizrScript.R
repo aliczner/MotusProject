@@ -252,3 +252,269 @@ for (i in 1:total_scenarios) {
 # View the final comparison table
 print(summary_table)
 write.csv(summary_table, "allFlightsPrioritizrEvaluation.csv")
+
+#=============================================================
+#plotting the prioritizr results
+#=============================================================
+
+library(terra)
+library(sf)
+library(maptiles)
+library(ggplot2)
+library(tidyterra)
+
+#make a list of the scenarios
+scenario_files <- paste0("scenario_", 1:27, ".rds")
+
+#make a smaller extent for mapping (got the values from mapview)
+smaller_extent <- st_as_sfc(st_bbox(
+  c(xmin = -94.46, 
+    xmax = -74.24, 
+    ymin = 40, 
+    ymax = 48), 
+  crs = 4326 #mapview default CRS
+))
+#reproject it 
+smaller_extent.pj <- st_transform(smaller_extent, 
+                                  crs = 3978)
+#for the basemap
+tiles <- get_tiles(
+  x = smaller_extent.pj, 
+  provider = "CartoDB.PositronNoLabels", 
+  zoom = 8, 
+  crop = TRUE
+)
+
+b <- st_bbox(tiles)
+
+#loop through the scenarios
+
+for (file in scenario_files) {
+  # Load data
+  data <- readRDS(file)
+  rast <- terra::unwrap(data$solution_raster)
+  
+  # get the threshold, targets, penalties for naming
+  scenario_name <- if (!is.null(data$name)) data$name else gsub("\\.rds$", 
+                                                                "", 
+                                                                file)
+  threshold <- data$threshold
+  target <- data$target
+  penalty <- data$penalty
+  
+  # Crop
+  rast_cropped <- terra::crop(rast, 
+                              ext(b["xmin"], 
+                                  b["xmax"], 
+                                  b["ymin"], 
+                                  b["ymax"]))
+  
+  # Plot
+  p <- ggplot() +
+    geom_spatraster_rgb(data = tiles, maxcell = 500000) +
+    geom_spatraster(data = as.factor(rast_cropped), maxcell = 500000) + 
+    scale_fill_manual(values = c("0" = "#ffffff00", "1" = "#2E933C")) +
+    labs(
+      title = paste("Scenario:", 
+                    scenario_name),
+      subtitle = paste("Threshold:", threshold, 
+                       "| Target:", target, 
+                       "| Penalty:", penalty)
+    ) +
+    theme_minimal() +
+    coord_sf(
+      xlim = c(b["xmin"],
+               b["xmax"]), 
+      ylim = c(b["ymin"], 
+               b["ymax"]), 
+      expand = FALSE
+    )
+  
+  # Save
+  filename <- paste0("Map_", scenario_name, ".pdf")
+  ggsave(filename, plot = p, width = 8, height = 6)
+}
+
+
+#=========================================================
+# Selection frequency plot
+#=========================================================
+library(terra)
+library(sf)
+library(maptiles)
+library(ggplot2)
+library(tidyterra)
+
+# get all the scenarios
+scenario_files <- list.files(pattern = "^scenario_.*\\.rds$")
+
+#need to remake tiles
+tiles <- get_tiles(
+  x = smaller_extent.pj, #same as prev section
+  provider = "CartoDB.PositronNoLabels", 
+  zoom = 8, 
+  crop = TRUE
+)
+b <- st_bbox(tiles)
+
+# going to loop through but start with 1 to get a template
+first_data <- readRDS(scenario_files[1])
+sum_raster <- terra::unwrap(first_data$solution_raster)
+
+# Loop through the remaining files and add them together
+for (i in 2:length(scenario_files)) {
+  data <- readRDS(scenario_files[i])
+  r <- terra::unwrap(data$solution_raster)
+  sum_raster <- sum_raster + r
+}
+
+# Convert the sum to selection frequency (proportion from 0 to 1)
+freq_raster <- sum_raster / length(scenario_files)
+
+# crop it to the smaller extent made in previous section
+freq_cropped <- terra::crop(freq_raster, 
+                            ext(b["xmin"], 
+                                b["xmax"], 
+                                b["ymin"], 
+                                b["ymax"]))
+
+#  Plot the selection frequency map
+p_freq <- ggplot() +
+  geom_spatraster_rgb(data = tiles, maxcell = 500000) +
+  geom_spatraster(data = freq_cropped, maxcell = 500000) + 
+  scale_fill_viridis_c(
+    option = "plasma", 
+    name = "Selection\nFrequency",
+    na.value = "transparent",
+    limits = c(0.01, 1)
+  ) +
+  labs(
+    title = "Selection Frequency Across Scenarios"
+  ) +
+  theme_minimal() + # Uses default dark text so it's clearly visible
+  coord_sf(
+    xlim = c(b["xmin"], b["xmax"]), 
+    ylim = c(b["ymin"], b["ymax"]), 
+    expand = FALSE
+  )
+
+print(p_freq)
+ggsave("Selection_Frequency_Map.pdf", plot = p_freq, width = 8, height = 6)
+
+#================================================================
+#irreplaceability map
+#================================================================
+
+library(terra)
+library(ggplot2)
+library(tidyterra)
+library(prioritizr)
+
+#I want to plot scenario with 50% target, 75% threshold, no constraint
+# to find all scenarios
+
+all_scenarios <- bind_rows(lapply(list.files(pattern = "^scenario_.*\\.rds$"), function(f) {
+  d <- readRDS(f)
+  data.frame(
+    file = f,
+    target = if (!is.null(d$target)) d$target else NA,
+    threshold = if (!is.null(d$threshold)) d$threshold else NA,
+    penalty = if (!is.null(d$penalty)) d$penalty else NA
+  )
+}))
+
+print(all_scenarios) #scenario 7 matches
+
+irreplace7 <- readRDS("scenario_7.rds")
+
+#need to rebuild the problem
+allSpecies <- rast("LKDERasterStack.tif")
+
+cost_layer <- allSpecies[[1]]
+cost_layer[!is.na(cost_layer)] <- 1
+names(cost_layer) <- "cost"
+
+p_problem <- problem(cost_layer, allSpecies) %>%
+  add_min_set_objective() %>%
+  add_relative_targets(irreplace7$target) %>%
+  add_binary_decisions()
+
+#get the solution
+p_solution <- terra::unwrap(irreplace7$solution_raster)
+
+# Calculates rank importance
+importance_scores <- eval_rank_importance(p_problem, 
+                                          p_solution, 
+                                          n = 10,
+                                          force = TRUE)
+
+# plotting the results
+
+importance_scores[importance_scores == 0] <- NA
+
+p_rank <- ggplot() +
+  geom_spatraster_rgb(data = tiles)+
+  geom_spatraster(data = importance_scores) + 
+  scale_fill_viridis_c(
+    option = "plasma", 
+    name = "Importance Rank",
+    na.value = "transparent",
+    n.breaks = 10
+  ) +
+  labs(
+    title = "Irreplaceability Rank Importance Map",
+    subtitle = "Scenario 7: Target 0.5 | Threshold 0.75 | No Boundary Penalty"
+  ) +
+  theme_minimal() +
+  coord_sf(
+    xlim = c(b["xmin"], b["xmax"]), 
+    ylim = c(b["ymin"], b["ymax"]), 
+    expand = FALSE
+  )
+
+print(p_rank)
+
+ggsave("Scenario_7_Rank_Importance_Map.pdf", plot = p_rank, width = 8, height = 6)
+
+#=====================================================
+# prioritizr with flight paths as planning units
+#=====================================================
+
+library(prioritizr)
+library(sf)
+library(terra)
+library(highs)
+library(ggplot2)
+library(ggspatial)
+library(prettymapr)
+
+flight_lines.pj <- st_read("flight_lines.gpkg")
+
+allSpecies <- rast("LKDERasterStack.tif")
+flight_lines.pj$cost <- 1
+cost_column = "cost"
+
+p_problem <- problem(flight_lines.pj, 
+                     allSpecies, 
+                     cost_column) %>%
+  add_min_set_objective() %>%
+  add_relative_targets(0.17) %>% # 
+  add_binary_decisions() %>% 
+  add_highs_solver(gap = 0.1, 
+                   verbose = TRUE)
+
+# Solve the network optimization
+p_solution <- solve(p_problem)
+
+ggplot(p_solution) +
+  annotation_map_tile(type = "cartolight", zoom = 5)+
+  geom_sf(aes(color = as.factor(solution_1)), 
+          linewidth = 0.8) +
+  scale_color_manual(values = c("0" = alpha("grey80", 
+                                            0.3), 
+                                "1" = "darkblue"), 
+                     name = "Selected") +
+  theme_minimal() +
+  labs(title = "Prioritizr Flight Path Solution")
+
+mapview(p_solution, zcol = "solution_1", layer.name = "Prioritized Paths")
