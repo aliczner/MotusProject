@@ -36,7 +36,88 @@ Sys.setenv(TZ = "UTC")
 
 ```
 
-## key migration areas
+## Histogram of Departure/Landing
+
+## Departure flights
+
+These are spring flights of just birds at night or mixed flights (crossed day/night). Only the first detection of a flight for an individual was included (i.e., if the flight had multiple steps, only the first step was included)
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+knitr::include_graphics("HistogramSpringNightFlightStart.png")
+
+```
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+knitr::include_graphics("HistogramSpringMixedFlightStart.png")
+
+```
+
+Similarly these histograms are for night and mixed flights but are the landings (the last row in a flight)
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+knitr::include_graphics("HistogramSpringMixedFlightStart.png")
+
+```
+
+Based on the graphs
+- take off could be 2 or 2.5hrs after sunset
+- landing could be from 7 - 8 hrs before sunrise and 1 hr after sunrise
+  - I think beyond that could be more daytime flights
+
+
+## Key Migration Areas
+
+### prioritizr 
+
+I ran 27 different scenarios across these combinations
+- threshold the KDE rasters to the top: 75%, 50% and 30%
+- targets (how much of each species KDE to keep): 17%, 30%, 50%
+- constraints to try and make the solution less fragmented: 0, 0.001, 0.05 (higher is less fragments)
+
+This output shows the pixels that were most often selected across the 27 scenarios
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "Selection_Frequency_Map.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+This output (Irreplaceability Rank Importance) shows which pixels are the most important to keep for a given scenario (so this would have to be done per scenario or select among them). I picked this scenario because it is the biggest in terms of pixels so I assumed it coverd most cases. 
+In this scenario the threshold is the top 75% of the data, target of 50% and no constraint (boundary penalty)
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "Scenario_7_Rank_Importance_Map.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
 
 ### Kernel density estimation on a raster grid for spring flights
 
