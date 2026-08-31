@@ -46,6 +46,7 @@ These are spring flights of just birds at night or mixed flights (crossed day/ni
 #| echo: false
 #| message: false
 #| warning: false
+#| out-width: "100%"
 
 knitr::include_graphics("HistogramSpringNightFlightStart.png")
 
@@ -55,6 +56,7 @@ knitr::include_graphics("HistogramSpringNightFlightStart.png")
 #| echo: false
 #| message: false
 #| warning: false
+#| out-width: "100%"
 
 knitr::include_graphics("HistogramSpringMixedFlightStart.png")
 
@@ -66,6 +68,7 @@ Similarly these histograms are for night and mixed flights but are the landings 
 #| echo: false
 #| message: false
 #| warning: false
+#| out-width: "100%"
 
 knitr::include_graphics("HistogramSpringMixedFlightStart.png")
 
