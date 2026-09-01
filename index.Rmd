@@ -35,6 +35,27 @@ library(spatialEco)
 Sys.setenv(TZ = "UTC") 
 
 ```
+## Migration timing of each species
+
+```{r, echo = FALSE}
+animalInfo <- read.csv( "StationPairsFiltered.csv")
+
+species_table <- animalInfo %>%
+  distinct(species, MigrateTime) %>%
+  arrange(MigrateTime, species)
+
+# Create table
+datatable(
+  species_table,
+  filter = 'top', # Adds search/filter boxes at the top of each column
+  options = list(
+    pageLength = 10,      # Number of rows to show per page
+    searchHighlight = TRUE
+  ),
+  colnames = c("Species", "Migration Timing")
+)
+```
+
 
 ## Histogram of Departure/Landing
 

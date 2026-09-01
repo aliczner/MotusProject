@@ -416,4 +416,306 @@ animalInfo <- flightInfo_geo %>%
 
 write.csv(animalInfo, "StationPairsFiltered.csv", row.names = FALSE)
 
+#==================================================================
+# adding in animal type
+#==================================================================
 
+bats <- c(
+  "Silver-haired Bat", "Eastern Red Bat", "Northern Hoary Bat", 
+  "Little Brown Myotis", "Indiana Myotis", "Big Brown Bat", 
+  "American Hoary Bat", "Northern Myotis", "Eastern Pipistrelle", 
+  "Cave Myotis", "Eastern Small-footed Myotis", "Southern Yellow Bat"
+)
+
+shorebirds <- c(
+  "Red Knot", "Ruddy Turnstone", "Black-bellied Plover", "Semipalmated Plover", 
+  "Sanderling", "White-rumped Sandpiper", "Semipalmated Sandpiper", "Dunlin", 
+  "Dunlin (hudsonia)", "Hudsonian Whimbrel", "American Woodcock", "Least Sandpiper", 
+  "Lesser Yellowlegs", "Pectoral Sandpiper", "American Oystercatcher", 
+  "Western Sandpiper", "Short-billed Dowitcher", "Piping Plover", 
+  "Short-billed Dowitcher (griseus)", "Solitary Sandpiper", "Greater Yellowlegs"
+)
+
+raptors <- c(
+  "Merlin", "Northern Saw-whet Owl", "Long-eared Owl", "Sharp-shinned Hawk", 
+  "Peregrine Falcon", "Sharp-shinned Hawk (Madrean)", "American Kestrel", 
+  "American Kestrel (Northern)"
+)
+
+water_birds <- c(
+  "Black-crowned Night Heron", "Canada Goose", "Wood Duck", 
+  "Least Bittern", "Black Tern", "Common Tern"
+)
+
+rails <- c(
+  "Clapper Rail", "Virginia Rail", "Common Gallinule", "Sora"
+)
+
+insects <- c(
+  "Common Green Darner", "Monarch"
+)
+
+groundbirds_doves <- c(
+  "Sharp-tailed Grouse", "Rock Pigeon (Feral Pigeon)", 
+  "Mourning Dove", "White-winged Dove"
+)
+
+aerial_insectivores <- c(
+  "Common Nighthawk", "Eastern Whip-poor-will", "Chimney Swift", "Common Poorwill"
+)
+
+woodpeckers <- c(
+  "Yellow-bellied Sapsucker", "Lewis's Woodpecker", "Northern Flicker"
+)
+
+cuckoos <- c(
+  "Black-billed Cuckoo"
+)
+
+# add column for animalType
+animalInfo <- animalInfo %>%
+  mutate(
+    # Detailed category column
+    AnimalType = case_when(
+      species %in% bats ~ "Bat",
+      species %in% shorebirds ~ "Shorebird",
+      species %in% raptors ~ "Raptor",
+      species %in% water_birds ~ "Water Bird",
+      species %in% rails ~ "Rail",
+      species %in% insects ~ "Insect",
+      species %in% groundbirds_doves ~ "Groundbird & Dove",
+      species %in% aerial_insectivores ~ "Aerial Insectivore",
+      species %in% woodpeckers ~ "Woodpecker",
+      species %in% cuckoos ~ "Cuckoo",
+      TRUE ~ "Songbird"
+    ),
+    
+    # Broad category column (Bird, Bat, or Insect)
+    Animal = case_when(
+      species %in% bats ~ "Bat",
+      species %in% insects ~ "Insect",
+      TRUE ~ "Bird" 
+    )
+  )
+
+
+#===================================================================
+#histograms of takeoff/landing
+#===================================================================
+
+#spring night flights departure
+spring_night_flights_start <- animalInfo %>%
+  filter(season == "Spring Migration" & 
+           flight_type == "flight" &
+           diel_period == "night" &
+           Animal == "Bird") %>% 
+  group_by(tagDeployID, flight_number) %>% 
+  slice_min(tsStart_dt,
+            n=1,
+            with_ties = FALSE) %>%  #makes sure only 1 row is selected
+  mutate(
+    sunset_dt = ymd_hms(sunset_local),
+    
+    # If the flight starts in the morning hours (before noon), 
+    # the relevant sunset was on the previous day, this fixes that
+    effective_sunset = if_else(
+      hour(tsStart_dt) < 12, 
+      sunset_dt - days(1), 
+      sunset_dt
+    ),
+    
+    # Calculate hours since the actual previous sunset
+    hours_since_sunset = as.numeric(difftime(tsStart_dt, 
+                                             effective_sunset, 
+                                             units = "hours"))
+  )
+
+# make the histogram
+ggplot(spring_night_flights_start, aes(x = hours_since_sunset)) +
+  geom_histogram(binwidth = 0.5, fill = "#202C59", color = "white") +
+  labs(
+    title = "Spring Night Flight: Start",
+    x = "Hours Since Sunset",
+    y = "Number of Flights"
+  ) +
+  theme_minimal()
+
+# spring mixed flights departure
+spring_mixed_flights_start <- animalInfo %>%
+  filter(season == "Spring Migration" & 
+           flight_type == "flight" &
+           diel_period == "mixed" &
+           Animal == "Bird") %>% 
+  group_by(tagDeployID, flight_number) %>% 
+  slice_min(tsStart_dt,
+            n=1,
+            with_ties = FALSE) %>%  
+  mutate(
+    sunset_dt = ymd_hms(sunset_local),
+    
+    effective_sunset = if_else(
+      hour(tsStart_dt) < 12, 
+      sunset_dt - days(1), 
+      sunset_dt
+    ),
+    
+    hours_since_sunset = as.numeric(difftime(tsStart_dt, 
+                                             effective_sunset, 
+                                             units = "hours"))
+  )
+
+ggplot(spring_mixed_flights_start, aes(x = hours_since_sunset)) +
+  geom_histogram(binwidth = 0.5, fill = "#202C59", color = "white") +
+  labs(
+    title = "Spring Mixed (Day/Night) Flights: Start",
+    x = "Hours Since Sunset",
+    y = "Number of Flights"
+  ) +
+  theme_minimal()
+
+
+#spring night flight end/landing
+spring_night_end <- animalInfo %>%
+  filter(season == "Spring Migration" & 
+           flight_type == "flight" &
+           diel_period %in% c("night") &
+           Animal == "Bird") %>%  
+  group_by(tagDeployID, flight_number) %>% 
+  slice_max(tsEnd_dt,
+            n=1,
+            with_ties = FALSE) %>% 
+  mutate(
+    sunrise_dt = ymd_hms(sunrise_local),
+    
+    effective_sunrise = if_else(
+      hour(tsEnd_dt) > 12, 
+      sunrise_dt + days(1), 
+      sunrise_dt
+    ),
+    
+    hours_relative_to_sunrise = as.numeric(difftime(tsEnd_dt, 
+                                                    sunrise_dt, 
+                                                    units = "hours"))
+  ) %>% 
+  filter(hours_relative_to_sunrise <= 5)
+
+ggplot(spring_night_end, aes(x = hours_relative_to_sunrise)) +
+  geom_histogram(binwidth = 0.5, fill = "#EF3054", color = "white") +
+  labs(
+    title = "Spring Night Flights: End Time",
+    x = "Hours Relative to Sunrise (0 = Sunrise)",
+    y = "Number of Flights"
+  ) +
+  theme_minimal()
+
+#spring mixed flight end/landing
+spring_mixed_end <- animalInfo %>%
+  filter(season == "Spring Migration" & 
+           flight_type == "flight" &
+           diel_period %in% c("mixed") &
+           Animal == "Bird") %>%  
+  group_by(tagDeployID, flight_number) %>% 
+  slice_max(tsEnd_dt,
+            n=1,
+            with_ties = FALSE) %>% 
+  mutate(
+    sunrise_dt = ymd_hms(sunrise_local),
+    
+    effective_sunrise = if_else(
+      hour(tsEnd_dt) > 12, 
+      sunrise_dt + days(1), 
+      sunrise_dt
+    ),
+    
+    hours_relative_to_sunrise = as.numeric(difftime(tsEnd_dt, 
+                                                    sunrise_dt, 
+                                                    units = "hours"))
+  )
+
+ggplot(spring_mixed_end, aes(x = hours_relative_to_sunrise)) +
+  geom_histogram(binwidth = 0.5, fill = "#EF3054", color = "white") +
+  labs(
+    title = "Spring Mixed Flights: End Time",
+    x = "Hours Relative to Sunrise (0 = Sunrise)",
+    y = "Number of Flights"
+  ) +
+  theme_minimal()
+
+#=======================================================
+# adding column for migratory timing
+#=======================================================
+#remove subspecies, change to just species level
+animalInfo <- animalInfo %>%
+  mutate(species = sub(" \\(.*\\)", "", species))
+#the space matches the space before the subspecies
+#double backslashes are needed to tell R to look for ( )
+#.* match any character, so any words in the bracket match
+
+#used Winger et al 2019, Ralph 1981, Dufour et al 2026, Cornell BOW
+nocturnal <- c (
+  "White-throated Sparrow","Dark-eyed Junco", "Song Sparrow", "Swamp Sparrow",
+  "Ovenbird", "Hermit Thrush", "Tennessee Warbler", "Fox Sparrow", 
+  "American Tree Sparrow", "Magnolia Warbler", "White-crowned Sparrow",
+  "Northern Waterthrush", "Yellow-rumped Warbler", "American Redstart",
+  "Blackpoll Warbler", "Veery", "Palm Warbler", "Chestnut-sided Warbler",
+  "Savannah Sparrow","Black-throated Green Warbler", "Baltimore Oriole",
+  "Red-eyed Vireo", "Connecticut Warbler", "Mourning Warbler", 
+  "Canada Warbler","Gray Catbird", "Wood Thrush", "Swainson's Thrush",
+  "Gray-cheeked Thrush", "Black-throated Blue Warbler", 
+  "Northern Waterthrush", "American Redstart", "Scarlet Tanager",
+  "Nashville Warbler", "Lincoln's Sparrow", "Bay-breasted Warbler", 
+  "Swainson's Warbler", "Painted Bunting", "Prothonotary Warbler",
+  "Kirtland's Warbler", "American Woodcock", "Baird's Sparrow", 
+  "Bank Swallow", "Bicknell's Thrush", "Black-bellied Plover",
+  "Black-billed Cuckoo", "Black-crowned Night Heron", "Black Tern",
+  "Bobolink", "Brown Thrasher", "Cerulean Warbler", "Clapper Rail", 
+  "Common Gallinule", "Common Poorwill", "Common Tern", "Eastern Towhee",
+  "Eastern Whip-poor-will", "Golden-winged Warbler", "Grasshopper Sparrow",
+  "Henslow's Sparrow", "Kentucky Warbler", "Least Bittern", 
+  "Least Sandpiper",  "Long-eared Owl", "Northern Saw-whet Owl",
+  "Northern Yellow Warbler", "Pectoral Sandpiper", "Piping Plover", 
+  "Prairie Warbler","Snowy Plover", "Solitary Sandpiper", "Sora", 
+  "Vesper Sparrow", "Virginia Rail", "Willow Flycatcher", "Wood Duck",
+  "Worm-eating Warbler","Yellow-bellied Sapsucker"
+  
+  
+)
+
+diurnal <- c(
+  "American Kestrel", "American Oystercatcher", "American Pipit",
+  "American Robin", "Barn Swallow", "Blue Jay", "Brown-headed Cowbird",
+  "Chestnut-collared Longspur", "Chimney Swift", "Cliff Swallow", 
+  "Evening Grosbeak", "Horned Lark", "Lewis's Woodpecker",  
+  "Loggerhead Shrike", "Merlin", "Mourning Dove", "Peregrine Falcon", 
+  "Purple Finch", "Purple Martin","Rusty Blackbird", "Sprague's Pipit",
+  "Tree Swallow", "White-winged Dove" 
+)
+
+nonmigratory <- c(
+  "Black-capped Chickadee", "Puerto Rican Oriole", "Rock Pigeon",
+  "Sharp-tailed Grouse" 
+)
+
+mixed <- c (
+  "Canada Goose", "Cedar Waxwing", "Common Nighthawk", "Dunlin", 
+  "Greater Yellowlegs", "Hudsonian Whimbrel", "Lesser Yellowlegs",
+  "Northern Flicker", "Pine Siskin", "Red Knot", "Ruddy Turnstone",
+  "Sanderling", "Semipalmated Plover", "Semipalmated Sandpiper",
+  "Sharp-shinned Hawk", "Snow Bunting","Short-billed Dowitcher",
+  "Western Sandpiper","White-rumped Sandpiper" 
+  
+)
+
+# add column for migration timing
+animalInfo <- animalInfo %>%
+  mutate(
+    # Detailed category column
+    MigrateTime = case_when(
+      species %in% nocturnal ~ "nocturnal",
+      species %in% diurnal ~ "diurnal",
+      species %in% mixed ~ "mixed",
+      species %in% nonmigratory ~ "nonmigratory",
+      TRUE ~ "unclassified"
+    ))
+          
+write.csv(animalInfo, "StationPairsFiltered.csv", row.names = FALSE)
