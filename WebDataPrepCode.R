@@ -286,8 +286,8 @@ flightInfo_df <- cleaned_backwards %>%
     
     # Near sun classification
     nearSun = case_when(
-      hours_from_sunset >= 2  ~ "sunset",
-      hours_from_sunrise <= 1 ~ "sunrise",
+      hours_from_sunset >= 2.5  ~ "sunset",
+      hours_from_sunrise <= 7 ~ "sunrise",
       TRUE                    ~ "none"
     )
   ) %>%

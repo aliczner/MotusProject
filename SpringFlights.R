@@ -48,6 +48,101 @@ flight_lines <- st_sf(flight_steps,
                       geometry = st_sfc(geoms, 
                                         crs = 4326))
 
+#================================================
+# checking flight timing
+#=================================================
+
+flight_time_summary <- flight_lines %>%
+  group_by(MigrateTime, species, diel_period) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(MigrateTime, species) %>%
+  mutate(
+    total_flights = sum(n),
+    percentage = (n / total_flights) * 100
+  ) %>%
+  ungroup()
+
+library(ggplot2)
+
+# diurnal barplot
+plot_diurnal <- flight_time_summary %>%
+  filter(MigrateTime == "diurnal") %>%
+  ggplot(aes(x = reorder(species, percentage), 
+             y = percentage, 
+             fill = diel_period)) +
+  geom_col(position = "stack") +
+  coord_flip() +
+  scale_fill_manual (
+    values = c (
+      "daylight" = "#ECA72C",
+      "mixed" = "#587B7F",
+      "night" = "#31263E"
+    )) +
+  labs(
+    title = "Diurnal",
+    x = "",
+    y = "Percentage of Flights (%)",
+    fill = "Diel Period"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom"
+  )
+
+
+# Mixed  Plot
+plot_mixed <- flight_time_summary %>%
+  filter(MigrateTime == "mixed") %>%
+  ggplot(aes(x = reorder(species, percentage), 
+             y = percentage, 
+             fill = diel_period)) +
+  geom_col(position = "stack") +
+  coord_flip() +
+  scale_fill_manual (
+    values = c (
+      "daylight" = "#ECA72C",
+      "mixed" = "#587B7F",
+      "night" = "#31263E"
+    )) +
+  labs(
+    title = "Mixed",
+    x = "",
+    y = "Percentage of Flights (%)",
+    fill = "Diel Period"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom"
+  )
+
+
+
+# nocturnal
+plot_nocturnal <- flight_time_summary %>%
+  filter(MigrateTime == "nocturnal") %>%
+  ggplot(aes(x = reorder(species, percentage), 
+             y = percentage, 
+             fill = diel_period)) +
+  geom_col(position = "stack") +
+  coord_flip() +
+  scale_fill_manual (
+    values = c (
+      "daylight" = "#ECA72C",
+      "mixed" = "#587B7F",
+      "night" = "#31263E"
+    )) +
+  labs(
+    title = "Nocturnal",
+    x = "",
+    y = "Percentage of Flights (%)",
+    fill = "Diel Period"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom"
+  )
+
+
 #======================================================
 # line kernel density all flights
 # ====================================================

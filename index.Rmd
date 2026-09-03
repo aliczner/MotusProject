@@ -35,7 +35,51 @@ library(spatialEco)
 Sys.setenv(TZ = "UTC") 
 
 ```
+## Barplot of flight times by  migration timing categories for each species
+
+Species were categorized by Winger et al 2019, Ralph 1981, Dufour et al 2026, Cornell BOW
+
+Flights are colour coded by the timing of the flight: daytime, mixed (day and night) or night flight
+
+### diurnal species
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("DiurnalFlightBarplot.png")
+
+```
+
+### mixed species 
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("MixedFlightBarplot.png")
+
+```
+
+### nocturnal species
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("NocturnalFlightBarplot.png")
+
+```
+
 ## Migration timing of each species
+
+used Winger et al 2019, Ralph 1981, Dufour et al 2026, Cornell BOW
 
 ```{r, echo = FALSE}
 animalInfo <- read.csv( "StationPairsFiltered.csv")
@@ -85,13 +129,25 @@ knitr::include_graphics("HistogramSpringMixedFlightStart.png")
 
 Similarly these histograms are for night and mixed flights but are the landings (the last row in a flight)
 
+
 ```{r}
 #| echo: false
 #| message: false
 #| warning: false
 #| out-width: "100%"
 
-knitr::include_graphics("HistogramSpringMixedFlightStart.png")
+knitr::include_graphics("HistogramSpringNightFlightEnd.png")
+
+```
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("HistogramSpringMixedFlightEnd.png")
 
 ```
 
