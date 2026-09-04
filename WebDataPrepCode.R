@@ -262,43 +262,27 @@ flightInfo_df <- cleaned_backwards %>%
   ) %>%
   ungroup() %>%
   mutate(
-    # Convert date-time strings
-    tsStart_posix = ymd_hms(tsStart_dt),
-    tsEnd_posix   = ymd_hms(tsEnd_dt),
-    sunrise_posix = ymd_hms(sunrise_local),
-    sunset_posix  = ymd_hms(sunset_local),
+    tsStart_utc = ymd_hms(tsStart_dt, tz = "UTC"),
+    tsEnd_utc = ymd_hms(tsEnd_dt, tz = "UTC"),
+    sunrise_utc = ymd_hms(sunrise_utc, tz = "UTC"),
+    sunset_utc  = ymd_hms(sunset_utc, tz = "UTC"),
     
-    # Classify diel period
     diel_period = case_when(
-      tsStart_posix >= sunrise_posix & 
-        tsEnd_posix <= sunset_posix ~ "daylight",
-      tsEnd_posix < sunrise_posix | tsStart_posix > sunset_posix ~ "night",
-      TRUE ~ "mixed"
+      tsStart_utc >= sunrise_utc & tsEnd_utc <= sunset_utc ~ "daylight",
+      TRUE ~ "night"
     ),
     
-    # Calculate hour gaps
-    hours_from_sunset  = as.numeric(abs(difftime(tsEnd_posix, 
-                                                 sunset_posix, 
+    hours_from_sunset  = as.numeric(abs(difftime(tsEnd_utc,
+                                                 sunset_utc, 
                                                  units = "hours"))),
-    hours_from_sunrise = as.numeric(abs(difftime(tsEnd_posix, 
-                                                 sunrise_posix, 
-                                                 units = "hours"))),
-    
-    # Near sun classification
-    nearSun = case_when(
-      hours_from_sunset >= 2.5  ~ "sunset",
-      hours_from_sunrise <= 7 ~ "sunrise",
-      TRUE                    ~ "none"
-    )
+    hours_from_sunrise = as.numeric(abs(difftime(tsEnd_utc, 
+                                                 sunrise_utc, 
+                                                 units = "hours")))
   ) %>%
   # Clean up temporary calculations
   select(
     -current_bearing, 
     -next_bearing,
-    -tsEnd_posix,
-    -tsStart_posix, 
-    -sunrise_posix, 
-    -sunset_posix, 
     -hours_from_sunset,
     -hours_from_sunrise
   )
@@ -461,7 +445,8 @@ groundbirds_doves <- c(
 )
 
 aerial_insectivores <- c(
-  "Common Nighthawk", "Eastern Whip-poor-will", "Chimney Swift", "Common Poorwill"
+  "Common Nighthawk", "Eastern Whip-poor-will", "Chimney Swift", 
+  "Common Poorwill"
 )
 
 woodpeckers <- c(
@@ -514,7 +499,7 @@ spring_night_flights_start <- animalInfo %>%
             n=1,
             with_ties = FALSE) %>%  #makes sure only 1 row is selected
   mutate(
-    sunset_dt = ymd_hms(sunset_local),
+    sunset_dt = ymd_hms(sunset_utc),
     
     # If the flight starts in the morning hours (before noon), 
     # the relevant sunset was on the previous day, this fixes that
@@ -540,39 +525,6 @@ ggplot(spring_night_flights_start, aes(x = hours_since_sunset)) +
   ) +
   theme_minimal()
 
-# spring mixed flights departure
-spring_mixed_flights_start <- animalInfo %>%
-  filter(season == "Spring Migration" & 
-           flight_type == "flight" &
-           diel_period == "mixed" &
-           Animal == "Bird") %>% 
-  group_by(tagDeployID, flight_number) %>% 
-  slice_min(tsStart_dt,
-            n=1,
-            with_ties = FALSE) %>%  
-  mutate(
-    sunset_dt = ymd_hms(sunset_local),
-    
-    effective_sunset = if_else(
-      hour(tsStart_dt) < 12, 
-      sunset_dt - days(1), 
-      sunset_dt
-    ),
-    
-    hours_since_sunset = as.numeric(difftime(tsStart_dt, 
-                                             effective_sunset, 
-                                             units = "hours"))
-  )
-
-ggplot(spring_mixed_flights_start, aes(x = hours_since_sunset)) +
-  geom_histogram(binwidth = 0.5, fill = "#202C59", color = "white") +
-  labs(
-    title = "Spring Mixed (Day/Night) Flights: Start",
-    x = "Hours Since Sunset",
-    y = "Number of Flights"
-  ) +
-  theme_minimal()
-
 
 #spring night flight end/landing
 spring_night_end <- animalInfo %>%
@@ -585,7 +537,7 @@ spring_night_end <- animalInfo %>%
             n=1,
             with_ties = FALSE) %>% 
   mutate(
-    sunrise_dt = ymd_hms(sunrise_local),
+    sunrise_dt = ymd_hms(sunrise_utc),
     
     effective_sunrise = if_else(
       hour(tsEnd_dt) > 12, 
@@ -608,38 +560,6 @@ ggplot(spring_night_end, aes(x = hours_relative_to_sunrise)) +
   ) +
   theme_minimal()
 
-#spring mixed flight end/landing
-spring_mixed_end <- animalInfo %>%
-  filter(season == "Spring Migration" & 
-           flight_type == "flight" &
-           diel_period %in% c("mixed") &
-           Animal == "Bird") %>%  
-  group_by(tagDeployID, flight_number) %>% 
-  slice_max(tsEnd_dt,
-            n=1,
-            with_ties = FALSE) %>% 
-  mutate(
-    sunrise_dt = ymd_hms(sunrise_local),
-    
-    effective_sunrise = if_else(
-      hour(tsEnd_dt) > 12, 
-      sunrise_dt + days(1), 
-      sunrise_dt
-    ),
-    
-    hours_relative_to_sunrise = as.numeric(difftime(tsEnd_dt, 
-                                                    sunrise_dt, 
-                                                    units = "hours"))
-  )
-
-ggplot(spring_mixed_end, aes(x = hours_relative_to_sunrise)) +
-  geom_histogram(binwidth = 0.5, fill = "#EF3054", color = "white") +
-  labs(
-    title = "Spring Mixed Flights: End Time",
-    x = "Hours Relative to Sunrise (0 = Sunrise)",
-    y = "Number of Flights"
-  ) +
-  theme_minimal()
 
 #=======================================================
 # adding column for migratory timing
@@ -666,7 +586,7 @@ nocturnal <- c (
   "Nashville Warbler", "Lincoln's Sparrow", "Bay-breasted Warbler", 
   "Swainson's Warbler", "Painted Bunting", "Prothonotary Warbler",
   "Kirtland's Warbler", "American Woodcock", "Baird's Sparrow", 
-  "Bank Swallow", "Bicknell's Thrush", "Black-bellied Plover",
+ "Bicknell's Thrush", "Black-bellied Plover",
   "Black-billed Cuckoo", "Black-crowned Night Heron", "Black Tern",
   "Bobolink", "Brown Thrasher", "Cerulean Warbler", "Clapper Rail", 
   "Common Gallinule", "Common Poorwill", "Common Tern", "Eastern Towhee",
@@ -688,7 +608,7 @@ diurnal <- c(
   "Evening Grosbeak", "Horned Lark", "Lewis's Woodpecker",  
   "Loggerhead Shrike", "Merlin", "Mourning Dove", "Peregrine Falcon", 
   "Purple Finch", "Purple Martin","Rusty Blackbird", "Sprague's Pipit",
-  "Tree Swallow", "White-winged Dove" 
+  "Tree Swallow", "White-winged Dove",  "Bank Swallow"
 )
 
 nonmigratory <- c(

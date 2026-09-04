@@ -105,7 +105,7 @@ datatable(
 
 ## Departure flights
 
-These are spring flights of just birds at night or mixed flights (crossed day/night). Only the first detection of a flight for an individual was included (i.e., if the flight had multiple steps, only the first step was included)
+These are spring flights of just birds at night. Only the first detection of a flight for an individual was included (i.e., if the flight had multiple steps, only the first step was included)
 
 ```{r}
 #| echo: false
@@ -113,7 +113,7 @@ These are spring flights of just birds at night or mixed flights (crossed day/ni
 #| warning: false
 #| out-width: "100%"
 
-knitr::include_graphics("HistogramSpringNightFlightStart.png")
+knitr::include_graphics("HistSpringNightFlightStart.png")
 
 ```
 
@@ -123,38 +123,10 @@ knitr::include_graphics("HistogramSpringNightFlightStart.png")
 #| warning: false
 #| out-width: "100%"
 
-knitr::include_graphics("HistogramSpringMixedFlightStart.png")
+knitr::include_graphics("HistSpringNightFlightEnd.png")
 
 ```
 
-Similarly these histograms are for night and mixed flights but are the landings (the last row in a flight)
-
-
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-#| out-width: "100%"
-
-knitr::include_graphics("HistogramSpringNightFlightEnd.png")
-
-```
-
-
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-#| out-width: "100%"
-
-knitr::include_graphics("HistogramSpringMixedFlightEnd.png")
-
-```
-
-Based on the graphs
-- take off could be 2 or 2.5hrs after sunset
-- landing could be from 7 - 8 hrs before sunrise and 1 hr after sunrise
-  - I think beyond that could be more daytime flights
 
 
 ## Key Migration Areas

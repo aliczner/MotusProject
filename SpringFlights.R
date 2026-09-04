@@ -115,8 +115,6 @@ plot_mixed <- flight_time_summary %>%
     legend.position = "bottom"
   )
 
-
-
 # nocturnal
 plot_nocturnal <- flight_time_summary %>%
   filter(MigrateTime == "nocturnal") %>%
@@ -142,7 +140,34 @@ plot_nocturnal <- flight_time_summary %>%
     legend.position = "bottom"
   )
 
+#==============================================================
+# partitioning night flights for nocturnal migrants
+#==============================================================
 
+noc.takeoff <- flight_lines %>% 
+  filter (MigrateTime == "nocturnal",
+          Animal == "Bird") %>% 
+  mutate(start_time = dmy_hms(tsStart),
+  sunset_time = ymd_hms(sunset_utc)
+) %>%
+  filter(
+      between(start_time, 
+              sunset_time, 
+              sunset_time + dhours(2.5))
+    )
+#results in just two flights
+
+bird.takeoff <- flight_lines %>% 
+  filter(Animal == "Bird") %>% 
+  mutate(start_time = ymd_hms(tsStart_dt),
+         sunset_time = ymd_hms(sunset_utc)
+  ) %>%
+  filter(
+    between(start_time, 
+            sunset_time, 
+            sunset_time + hours(3))
+  )
+    
 #======================================================
 # line kernel density all flights
 # ====================================================
