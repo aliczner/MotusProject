@@ -49,7 +49,7 @@ Flights are colour coded by the timing of the flight: daytime, mixed (day and ni
 #| warning: false
 #| out-width: "100%"
 
-knitr::include_graphics("DiurnalFlightBarplot.png")
+knitr::include_graphics("DiurnalFlightsBarplot.png")
 
 ```
 
@@ -61,7 +61,7 @@ knitr::include_graphics("DiurnalFlightBarplot.png")
 #| warning: false
 #| out-width: "100%"
 
-knitr::include_graphics("MixedFlightBarplot.png")
+knitr::include_graphics("MixedFlightsBarplot.png")
 
 ```
 
@@ -73,7 +73,7 @@ knitr::include_graphics("MixedFlightBarplot.png")
 #| warning: false
 #| out-width: "100%"
 
-knitr::include_graphics("NocturnalFlightBarplot.png")
+knitr::include_graphics("NocturnalFlightsBarplot.png")
 
 ```
 
@@ -400,133 +400,4 @@ walk(subbasins_list,
 ```
 
 
-## Detection heatmaps
-```{r, echo=FALSE}
-
-# creating a raster function
-generate_density_raster <- function(data, 
-                                    filter_col = NULL, 
-                                    target_value = NULL, 
-                                    h_val = 1, 
-                                    n_val = 600) {
-  
-  # filters by column
-  if (!is.null(filter_col) & !is.null(target_value)) {
-    data <- data %>% filter(!!sym(filter_col) == target_value)
-  }
-  
-  if (nrow(data) == 0) return(NULL)
-  
-  # count detections and weight by detections
-  station_counts <- data %>% 
-    group_by(lon, lat) %>% 
-    summarize(total_detections = n(), .groups = "drop")
-  
-  weighted_points <- station_counts %>% 
-    uncount(total_detections)
-  
-  # calculate kernel density of detections
-  kde_calc <- MASS::kde2d(
-    x = weighted_points$lon, 
-    y = weighted_points$lat, 
-    n = n_val, 
-    h = c(h_val, h_val),
-    lims = c(
-      min(springTable$lon) - 2.0, max(springTable$lon) + 2.0,
-      min(springTable$lat) - 2.0, max(springTable$lat) + 2.0
-    )
-  )
-  
-  # convert to raster
-  kde_raster <- stars::st_as_stars(
-    list(density = kde_calc$z),
-    dimensions = stars::st_dimensions(
-      x = kde_calc$x, 
-      y = kde_calc$y, 
-      cell_midpoints = TRUE
-    )
-  )
-  sf::st_crs(kde_raster) <- 4326
-  
-  # remove low values
-  kde_raster[kde_raster < (max(kde_raster[[1]], na.rm = TRUE) * 0.01)] <- NA
-  
-  return(kde_raster)
-}
-
-#making the layers for mapping
-overall_raster  <- generate_density_raster(springTable, 
-                                           filter_col = NULL,          
-                                           target_value = NULL)
-mixed_raster    <- generate_density_raster(springTable, 
-                                           filter_col = "diel_period", 
-                                           target_value = "mixed")
-night_raster    <- generate_density_raster(springTable, 
-                                           filter_col = "diel_period", 
-                                           target_value = "night")
-daylight_raster <- generate_density_raster(springTable, 
-                                           filter_col = "diel_period",
-                                           target_value = "daylight")
-sunrise_raster  <- generate_density_raster(springTable, 
-                                           filter_col = "nearSun",     
-                                           target_value = "sunrise")
-sunset_raster   <- generate_density_raster(springTable, 
-                                           filter_col = "nearSun",   
-                                           target_value = "sunset")
-
-#mapping
-thermal_palette <- rev(viridis::magma(100))
-
-detection_map <-mapview(
-  overall_raster, 
-  col.regions = thermal_palette, 
-  alpha.regions = 0.60,
-  layer.name = "all detections", 
-  na.color = "transparent", 
-  hide = FALSE
-) +
-mapview(
-  mixed_raster, 
-  col.regions = thermal_palette, 
-  alpha.regions = 0.60,
-  layer.name = "Day & Night", 
-  na.color = "transparent",
-  hide = TRUE
-) +
-mapview(
-  night_raster, 
-  col.regions = thermal_palette, 
-  alpha.regions = 0.60,
-  layer.name = "Night", na.color = "transparent",
-  hide = TRUE
-) +
-mapview(
-  daylight_raster, 
-  col.regions = thermal_palette, 
-  alpha.regions = 0.60,
-  layer.name = "Daylight", 
-  na.color = "transparent",
-  hide = TRUE
-) +
-mapview(
-  sunrise_raster, 
-  col.regions = thermal_palette, 
-  alpha.regions = 0.60,
-  layer.name = "Sunrise", 
-  na.color = "transparent",
-  hide = TRUE
-) +
-mapview(
-  sunset_raster, 
-  col.regions = thermal_palette, 
-  alpha.regions = 0.60,
-  layer.name = "Sunset", 
-  na.color = "transparent",
-  hide = TRUE,
-  map.types = c("CartoDB.Positron", "OpenStreetMap")
-)
-library(leaflet)
-detection_map@map %>% 
-  setView(lng = -82.0, lat = 44.0, zoom = 6)
-```
 

@@ -75,7 +75,6 @@ plot_diurnal <- flight_time_summary %>%
   scale_fill_manual (
     values = c (
       "daylight" = "#ECA72C",
-      "mixed" = "#587B7F",
       "night" = "#31263E"
     )) +
   labs(
@@ -89,7 +88,6 @@ plot_diurnal <- flight_time_summary %>%
     legend.position = "bottom"
   )
 
-
 # Mixed  Plot
 plot_mixed <- flight_time_summary %>%
   filter(MigrateTime == "mixed") %>%
@@ -101,7 +99,6 @@ plot_mixed <- flight_time_summary %>%
   scale_fill_manual (
     values = c (
       "daylight" = "#ECA72C",
-      "mixed" = "#587B7F",
       "night" = "#31263E"
     )) +
   labs(
@@ -126,7 +123,6 @@ plot_nocturnal <- flight_time_summary %>%
   scale_fill_manual (
     values = c (
       "daylight" = "#ECA72C",
-      "mixed" = "#587B7F",
       "night" = "#31263E"
     )) +
   labs(
@@ -143,30 +139,31 @@ plot_nocturnal <- flight_time_summary %>%
 #==============================================================
 # partitioning night flights for nocturnal migrants
 #==============================================================
+# If the flight starts in the morning  its true starting sunset 
+# was actually on the previous calendar day (- 1 day).
+# Otherwise, it belongs to the sunset of the current calendar day.
 
-noc.takeoff <- flight_lines %>% 
-  filter (MigrateTime == "nocturnal",
-          Animal == "Bird") %>% 
-  mutate(start_time = dmy_hms(tsStart),
-  sunset_time = ymd_hms(sunset_utc)
-) %>%
-  filter(
-      between(start_time, 
-              sunset_time, 
-              sunset_time + dhours(2.5))
-    )
-#results in just two flights
-
-bird.takeoff <- flight_lines %>% 
-  filter(Animal == "Bird") %>% 
-  mutate(start_time = ymd_hms(tsStart_dt),
-         sunset_time = ymd_hms(sunset_utc)
+noc.takeoff <- flight_lines %>%  
+  filter(MigrateTime == "nocturnal",
+         Animal == "Bird") %>%  
+  mutate(
+    start_time = ymd_hms(tsStart_dt),
+    sunset_time_dt = ymd_hms(sunset_utc),
+    true_sunset = if_else(
+      hour(start_time) < 12, 
+      sunset_time_dt - days(1), 
+      sunset_time_dt
+    ),
+    
+    # Calculate continuous positive hours
+    hours_since_sunset = as.numeric(difftime(start_time, true_sunset, units = "hours"))
   ) %>%
+  # Filter for flights starting between 0 and 2 hours after sunset
   filter(
-    between(start_time, 
-            sunset_time, 
-            sunset_time + hours(3))
+    between(hours_since_sunset, 0, 2)
   )
+
+
     
 #======================================================
 # line kernel density all flights

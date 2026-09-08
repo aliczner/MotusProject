@@ -126,18 +126,22 @@ data_obs <- data_obs %>%
                                                   tsStart_dt, 
                                                   units = "hours")),
     # Calculate sunrise and sunset in UTC
-    sunrise_utc = sunriset(cbind(lon, lat), 
+    sunrise_utc_previous = sunriset(cbind(lon, lat), 
                            tsStart_dt, 
                            direction = "sunrise", 
                            POSIXct.out = TRUE)$time,
-    sunset_utc  = sunriset(cbind(lon, lat), 
+    sunset_utc_previous  = sunriset(cbind(lon, lat), 
                            tsStart_dt, 
                            direction = "sunset", 
                            POSIXct.out = TRUE)$time,
-    
-    #Convert to  Eastern Time so they make  sense
-    sunrise_local = with_tz(sunrise_utc, tzone = "America/Toronto"),
-    sunset_local  = with_tz(sunset_utc, tzone = "America/Toronto")
+    sunrise_utc_current = sunriset(cbind(lon, lat), 
+                                    tsEnd_dt, 
+                                    direction = "sunrise", 
+                                    POSIXct.out = TRUE)$time,
+    sunset_utc_current  = sunriset(cbind(lon, lat), 
+                                    tsEnd_dt, 
+                                    direction = "sunset", 
+                                    POSIXct.out = TRUE)$time,
   )
     
 write_csv(data_obs, "observationSummary.csv")
@@ -264,27 +268,20 @@ flightInfo_df <- cleaned_backwards %>%
   mutate(
     tsStart_utc = ymd_hms(tsStart_dt, tz = "UTC"),
     tsEnd_utc = ymd_hms(tsEnd_dt, tz = "UTC"),
-    sunrise_utc = ymd_hms(sunrise_utc, tz = "UTC"),
-    sunset_utc  = ymd_hms(sunset_utc, tz = "UTC"),
+    sunrise_utc_previous = ymd_hms(sunrise_utc_previous, tz = "UTC"),
+    sunset_utc_current  = ymd_hms(sunset_utc_current, tz = "UTC"),
     
     diel_period = case_when(
-      tsStart_utc >= sunrise_utc & tsEnd_utc <= sunset_utc ~ "daylight",
+      tsStart_utc >= sunrise_utc_previous & 
+        tsEnd_utc <= sunset_utc_current ~ "daylight",
       TRUE ~ "night"
     ),
     
-    hours_from_sunset  = as.numeric(abs(difftime(tsEnd_utc,
-                                                 sunset_utc, 
-                                                 units = "hours"))),
-    hours_from_sunrise = as.numeric(abs(difftime(tsEnd_utc, 
-                                                 sunrise_utc, 
-                                                 units = "hours")))
   ) %>%
   # Clean up temporary calculations
   select(
     -current_bearing, 
     -next_bearing,
-    -hours_from_sunset,
-    -hours_from_sunrise
   )
 # adding the subbasin information to the dataframe
 #needs to be done separately for current vs previous station
@@ -499,24 +496,28 @@ spring_night_flights_start <- animalInfo %>%
             n=1,
             with_ties = FALSE) %>%  #makes sure only 1 row is selected
   mutate(
-    sunset_dt = ymd_hms(sunset_utc),
+    sunset_dt_previous = ymd_hms(sunset_utc_previous),
     
-    # If the flight starts in the morning hours (before noon), 
-    # the relevant sunset was on the previous day, this fixes that
-    effective_sunset = if_else(
-      hour(tsStart_dt) < 12, 
-      sunset_dt - days(1), 
-      sunset_dt
-    ),
+    sunset_raw_diff = as.numeric(difftime(tsStart_dt, 
+                                   sunset_dt_previous, 
+                                   units = "hours")),
     
-    # Calculate hours since the actual previous sunset
-    hours_since_sunset = as.numeric(difftime(tsStart_dt, 
-                                             effective_sunset, 
-                                             units = "hours"))
+    # Adjust sunset based on if it is >12 hrs
+    effective_sunset = case_when(
+        sunset_raw_diff >= 12  ~ sunset_dt_previous + days(1),
+        sunset_raw_diff <= -12 ~ sunset_dt_previous - days(1),
+        TRUE                  ~ sunset_dt_previous
+      ),
+    
+    hours_relative_to_sunset = as.numeric(difftime(
+      tsStart_dt, 
+      effective_sunset, 
+      units = "hours"
+    ))
   )
 
 # make the histogram
-ggplot(spring_night_flights_start, aes(x = hours_since_sunset)) +
+ggplot(spring_night_flights_start, aes(x = hours_relative_to_sunset)) +
   geom_histogram(binwidth = 0.5, fill = "#202C59", color = "white") +
   labs(
     title = "Spring Night Flight: Start",
@@ -528,28 +529,35 @@ ggplot(spring_night_flights_start, aes(x = hours_since_sunset)) +
 
 #spring night flight end/landing
 spring_night_end <- animalInfo %>%
-  filter(season == "Spring Migration" & 
+  filter(season == "Spring Migration" &  
            flight_type == "flight" &
            diel_period %in% c("night") &
            Animal == "Bird") %>%  
   group_by(tagDeployID, flight_number) %>% 
-  slice_max(tsEnd_dt,
-            n=1,
+  slice_max(tsEnd_dt, 
+            n = 1, 
             with_ties = FALSE) %>% 
   mutate(
-    sunrise_dt = ymd_hms(sunrise_utc),
+    sunrise_dt_current = ymd_hms(sunrise_utc_current),
     
-    effective_sunrise = if_else(
-      hour(tsEnd_dt) > 12, 
-      sunrise_dt + days(1), 
-      sunrise_dt
-    ),
+      raw_diff = as.numeric(difftime(tsEnd_dt, 
+                                     sunrise_dt_current, 
+                                     units = "hours")),
+      
+      # Adjust sunrise based on if it is >12 hrs
+      effective_sunrise = case_when(
+        raw_diff > 12 ~ sunrise_dt_current + days(1),# Sunrise is yesterday; shift forward
+        raw_diff < -12 ~ sunrise_dt_current - days(1),# Sunrise is tomorrow; shift backward
+        TRUE           ~ sunrise_dt_current 
+      ),
+      
+      hours_relative_to_sunrise = as.numeric(difftime(
+        tsEnd_dt, 
+        effective_sunrise, 
+        units = "hours"
+      ))
+    )
     
-    hours_relative_to_sunrise = as.numeric(difftime(tsEnd_dt, 
-                                                    sunrise_dt, 
-                                                    units = "hours"))
-  ) %>% 
-  filter(hours_relative_to_sunrise <= 5)
 
 ggplot(spring_night_end, aes(x = hours_relative_to_sunrise)) +
   geom_histogram(binwidth = 0.5, fill = "#EF3054", color = "white") +
