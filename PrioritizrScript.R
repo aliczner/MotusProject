@@ -6,25 +6,29 @@ library(prioritizr)
 library(highs)
 
 #=========================================
-# preparing the data layers
+# preparing the all birds data layers
 #=========================================
 
-# features layer (species line KDE)
-allSpecies <- rast("LKDERasterStack.tif")
+# features layer (species line KDE for birds)
+allBirds <- rast("LKDEBirdRasterStack.tif")
 
+#applying a threshold to remove very small values from being selected
 apply_threshold <- function(rast_stack, top_pct) {
   thresh_stack <- rast_stack
   for (i in 1:nlyr(thresh_stack)) {
     r <- thresh_stack[[i]]
     
-    # Extract values directly as a vector without extra baggage
+    # Extract values 
     vals <- values(r, mat = FALSE)
     vals_positive <- vals[vals > 0]
     
     if (length(vals_positive) > 0) {
-      cutoff <- quantile(vals_positive, probs = (1 - top_pct), names = FALSE, na.rm = TRUE)
+      cutoff <- quantile(vals_positive, 
+                         probs = (1 - top_pct), 
+                         names = FALSE, 
+                         na.rm = TRUE)
       
-      # Modify raster values efficiently using terra's internal indexing
+      # Modify raster values to be above the threshold
       r[r < cutoff] <- 0
       thresh_stack[[i]] <- r
     }
@@ -35,10 +39,10 @@ apply_threshold <- function(rast_stack, top_pct) {
   }
   return(thresh_stack)
 }
-# Generate your thresholded stacks
-stack_top75 <- apply_threshold(allSpecies, 0.75)
-stack_top50 <- apply_threshold(allSpecies, 0.50)
-stack_top30 <- apply_threshold(allSpecies, 0.30)
+# Generate the thresholded stacks
+stack_top75 <- apply_threshold(allBirds, 0.75)
+stack_top50 <- apply_threshold(allBirds, 0.50)
+stack_top30 <- apply_threshold(allBirds, 0.30)
 
 writeRaster(stack_top75, "stack_top75.tif", overwrite = TRUE)
 writeRaster(stack_top50, "stack_top50.tif", overwrite = TRUE)
@@ -49,9 +53,13 @@ stack_top50 <- rast("stack_top50.tif")
 stack_top30 <- rast("stack_top30.tif")
 
 # create cost layer with even cost
-cost_layer <- allSpecies[[1]]
+cost_layer <- allBirds[[1]]
 cost_layer[!is.na(cost_layer)] <- 1
 names(cost_layer) <- "cost"
+
+#=======================================================
+# creating the nocturnal birds layer
+# ======================================================
 
 #========================================================
 # prioritizr
@@ -165,7 +173,7 @@ for (i in 1:nrow(scenarios_constrained)) {
   # Solve the problem
   solution <- solve(p, force = TRUE)
   
-  # Bundle output (offsetting index name so it doesn't overwrite 1-9)
+  # offsetting index name so it doesn't overwrite 1-9
   scenario_id_offset <- i + 9 
   
   scenario_output <- list(
@@ -193,7 +201,7 @@ for (i in 1:nrow(scenarios_constrained)) {
 # evaluating prioritizr outputs
 #================================================
 
-# Initialize an empty data frame to store results
+# make an empty data frame to store results
 summary_table <- data.frame()
 total_scenarios <- 27 
 
@@ -251,7 +259,7 @@ for (i in 1:total_scenarios) {
 
 # View the final comparison table
 print(summary_table)
-write.csv(summary_table, "allFlightsPrioritizrEvaluation.csv")
+write.csv(summary_table, "allBirdsPrioritizrEvaluation.csv")
 
 #=============================================================
 #plotting the prioritizr results
@@ -308,7 +316,7 @@ for (file in scenario_files) {
                                   b["xmax"], 
                                   b["ymin"], 
                                   b["ymax"]))
-  
+
   # Plot
   p <- ggplot() +
     geom_spatraster_rgb(data = tiles, maxcell = 500000) +
@@ -351,7 +359,7 @@ scenario_files <- list.files(pattern = "^scenario_.*\\.rds$")
 #need to remake tiles
 tiles <- get_tiles(
   x = smaller_extent.pj, #same as prev section
-  provider = "CartoDB.PositronNoLabels", 
+  provider = "Esri.WorldGrayCanvas", 
   zoom = 8, 
   crop = TRUE
 )
@@ -378,6 +386,23 @@ freq_cropped <- terra::crop(freq_raster,
                                 b["ymin"], 
                                 b["ymax"]))
 
+### stations locations
+
+stations <- read.csv("StationDownloads/Motus-data-region-undefined_stations_downloaded-2026-09-09.csv")
+stations.sf <- st_as_sf(stations,
+                        coords = c("longitude", "latitude"),
+                        crs = 4326)
+stations_pj <- st_transform(stations.sf, crs = 3978)
+#loading great lakes watershed polygon, contains subbasins for each lake
+GLWatershed <- st_read("./greatlakes_subbasins/greatlakes_subbasins.shp")
+
+GLWS_proj2 <- st_transform(GLWatershed, crs = 3978)
+
+#filter points outside of GLWS 
+stations_pj2 <- stations_pj %>%
+  st_filter(GLWS_proj2)
+
+
 #  Plot the selection frequency map
 p_freq <- ggplot() +
   geom_spatraster_rgb(data = tiles, maxcell = 500000) +
@@ -388,6 +413,13 @@ p_freq <- ggplot() +
     na.value = "transparent",
     limits = c(0.01, 1)
   ) +
+  geom_sf(
+    data = stations_pj2,
+    color = "black",
+    fill= NA,
+    size = 2,
+    shape = 21
+  )+
   labs(
     title = "Selection Frequency Across Scenarios"
   ) +
@@ -399,7 +431,10 @@ p_freq <- ggplot() +
   )
 
 print(p_freq)
-ggsave("Selection_Frequency_Map.pdf", plot = p_freq, width = 8, height = 6)
+ggsave("Selection_Frequency_Map_Birds.pdf", 
+       plot = p_freq, 
+       width = 8, 
+       height = 6)
 
 #================================================================
 #irreplaceability map
@@ -428,13 +463,13 @@ print(all_scenarios) #scenario 7 matches
 irreplace7 <- readRDS("scenario_7.rds")
 
 #need to rebuild the problem
-allSpecies <- rast("LKDERasterStack.tif")
+allBirds <- rast("LKDEBirdRasterStack.tif")
 
-cost_layer <- allSpecies[[1]]
+cost_layer <- allBids[[1]]
 cost_layer[!is.na(cost_layer)] <- 1
 names(cost_layer) <- "cost"
 
-p_problem <- problem(cost_layer, allSpecies) %>%
+p_problem <- problem(cost_layer, allBirds) %>%
   add_min_set_objective() %>%
   add_relative_targets(irreplace7$target) %>%
   add_binary_decisions()
@@ -461,6 +496,13 @@ p_rank <- ggplot() +
     na.value = "transparent",
     n.breaks = 10
   ) +
+  geom_sf(
+    data = stations_pj2,
+    color = "black",
+    fill= NA,
+    size = 2,
+    shape = 21
+  )+
   labs(
     title = "Irreplaceability Rank Importance Map",
     subtitle = "Scenario 7: Target 0.5 | Threshold 0.75 | No Boundary Penalty"
@@ -474,47 +516,11 @@ p_rank <- ggplot() +
 
 print(p_rank)
 
-ggsave("Scenario_7_Rank_Importance_Map.pdf", plot = p_rank, width = 8, height = 6)
+ggsave("Scenario_7_Rank_Importance_Bird_Map.pdf", 
+       plot = p_rank, 
+       width = 8, 
+       height = 6)
 
-#=====================================================
-# prioritizr with flight paths as planning units
-#=====================================================
-
-library(prioritizr)
-library(sf)
-library(terra)
-library(highs)
-library(ggplot2)
-library(ggspatial)
-library(prettymapr)
-
-flight_lines.pj <- st_read("flight_lines.gpkg")
-
-allSpecies <- rast("LKDERasterStack.tif")
-flight_lines.pj$cost <- 1
-cost_column = "cost"
-
-p_problem <- problem(flight_lines.pj, 
-                     allSpecies, 
-                     cost_column) %>%
-  add_min_set_objective() %>%
-  add_relative_targets(0.17) %>% # 
-  add_binary_decisions() %>% 
-  add_highs_solver(gap = 0.1, 
-                   verbose = TRUE)
-
-# Solve the network optimization
-p_solution <- solve(p_problem)
-
-ggplot(p_solution) +
-  annotation_map_tile(type = "cartolight", zoom = 5)+
-  geom_sf(aes(color = as.factor(solution_1)), 
-          linewidth = 0.8) +
-  scale_color_manual(values = c("0" = alpha("grey80", 
-                                            0.3), 
-                                "1" = "darkblue"), 
-                     name = "Selected") +
-  theme_minimal() +
-  labs(title = "Prioritizr Flight Path Solution")
-
-mapview(p_solution, zcol = "solution_1", layer.name = "Prioritized Paths")
+#=================================================================
+# prioritizr of nocturnal migrants
+#==================================================================

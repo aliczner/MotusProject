@@ -146,7 +146,7 @@ This output shows the pixels that were most often selected across the 27 scenari
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "Selection_Frequency_Map.pdf",
+  src = "Selection_Frequency_Map_Birds.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -163,7 +163,7 @@ In this scenario the threshold is the top 75% of the data, target of 50% and no 
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "Scenario_7_Rank_Importance_Map.pdf",
+  src = "Scenario_7_Rank_Importance_Bird_Map.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -171,9 +171,9 @@ htmltools::tags$iframe(
 
 ```
 
-### Kernel density estimation on a raster grid for spring flights
+### Kernel density estimation on a raster grid for Bird spring flights
 
-A KDE was made for each species, then they were stacked and summed
+A KDE was made for each Bird species, then they were stacked and summed
 not quite a line KDE method, but this preserves species and is less memory intensive
 
 2.5 km resolution, 5 km bandwidth (too memory intensive to go finer)
@@ -181,23 +181,12 @@ not quite a line KDE method, but this preserves species and is less memory inten
 #| echo: false
 #| message: false
 #| warning: false
+#| out-width: "100%"
 
-knitr::include_graphics("StackedCooccurrenceLKDE.png")
-
-```
-
-### Line KDE of all flights in spring
-
-more exact flight paths (1 km resolution, 10 km bandwidth)
-
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-
-knitr::include_graphics("AllFlightsMovementDensity.png")
+knitr::include_graphics("BirdCooccurrenceLKDE.png")
 
 ```
+
 
 Overview of the data from Motus Project #1 summary data (downloaded off the web). 
 
