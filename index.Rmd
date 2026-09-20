@@ -35,6 +35,7 @@ library(spatialEco)
 Sys.setenv(TZ = "UTC") 
 
 ```
+
 ## Barplot of flight times by  migration timing categories for each species
 
 Species were categorized by Winger et al 2019, Ralph 1981, Dufour et al 2026, Cornell BOW
@@ -133,12 +134,12 @@ knitr::include_graphics("HistSpringNightFlightEnd.png")
 
 ### prioritizr 
 
-I ran 27 different scenarios across these combinations
+I ran 9 different scenarios across these combinations
 - threshold the KDE rasters to the top: 75%, 50% and 30%
 - targets (how much of each species KDE to keep): 17%, 30%, 50%
-- constraints to try and make the solution less fragmented: 0, 0.001, 0.05 (higher is less fragments)
 
-This output shows the pixels that were most often selected across the 27 scenarios
+
+This output shows the pixels that were most often selected across the 9 scenarios for All Birds
 
 ```{r}
 #| echo: false
@@ -154,8 +155,57 @@ htmltools::tags$iframe(
 
 ```
 
+This is the selection frequency map for all nocturnal birds
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/nocturnal_birds/Selection_Frequency_Map_nocturnal_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+This is the selection frequency for nocturnal takeoff
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/nocturnal_takeoff/Selection_Frequency_Map_nocturnal_takeoff.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+This is the selection frequency for nocturnal landing
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/nocturnal_land/Selection_Frequency_Map_nocturnal_land.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+
 This output (Irreplaceability Rank Importance) shows which pixels are the most important to keep for a given scenario (so this would have to be done per scenario or select among them). I picked this scenario because it is the biggest in terms of pixels so I assumed it coverd most cases. 
-In this scenario the threshold is the top 75% of the data, target of 50% and no constraint (boundary penalty)
+In this scenario the threshold is the top 75% of the data and target of 50%
 
 ```{r}
 #| echo: false
@@ -170,6 +220,22 @@ htmltools::tags$iframe(
 )
 
 ```
+
+This is rank importance of all Nocturnal Birds
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/nocturnal_birds/Scenario_7_Rank_Importance_Map.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
 
 ### Kernel density estimation on a raster grid for Bird spring flights
 
@@ -188,7 +254,6 @@ knitr::include_graphics("BirdCooccurrenceLKDE.png")
 ```
 
 
-Overview of the data from Motus Project #1 summary data (downloaded off the web). 
 
 ### Data preparation summary
 The summary data was downloaded from all Motus Project #1 towers.
