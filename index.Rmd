@@ -141,6 +141,8 @@ I ran 9 different scenarios across these combinations
 
 This output shows the pixels that were most often selected across the 9 scenarios for All Birds
 
+#### This is the output for all birds
+
 ```{r}
 #| echo: false
 #| message: false
@@ -155,7 +157,7 @@ htmltools::tags$iframe(
 
 ```
 
-This is the selection frequency map for all nocturnal birds
+### This is the selection frequency map for all nocturnal birds
 
 ```{r}
 #| echo: false
@@ -171,7 +173,7 @@ htmltools::tags$iframe(
 
 ```
 
-This is the selection frequency for nocturnal takeoff
+### This is the selection frequency for nocturnal takeoff (761 obs, 32 species)
 
 ```{r}
 #| echo: false
@@ -187,7 +189,7 @@ htmltools::tags$iframe(
 
 ```
 
-This is the selection frequency for nocturnal landing
+### This is the selection frequency for nocturnal landing (58 obs, 14 species)
 
 ```{r}
 #| echo: false
@@ -203,6 +205,21 @@ htmltools::tags$iframe(
 
 ```
 
+### The selection frequency for all diurnal birds (267 obs, 13 species)
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/day_birds/Selection_Frequency_Map_day_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
 
 This output (Irreplaceability Rank Importance) shows which pixels are the most important to keep for a given scenario (so this would have to be done per scenario or select among them). I picked this scenario because it is the biggest in terms of pixels so I assumed it coverd most cases. 
 In this scenario the threshold is the top 75% of the data and target of 50%

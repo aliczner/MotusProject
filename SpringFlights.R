@@ -505,3 +505,81 @@ mapview(bird_noc_land_cooccurrence_log,
         col.regions = viridis::inferno(256),
         na.color = "transparent",
         layer.name = "Core migratory areas")
+
+#==================================================================
+# Multispecies Line Kernel Density Estimation Overlay diurnal birds
+#===================================================================
+library(terra)
+library(sf)
+library(dplyr)
+library(purrr)
+library(mapview)
+library(stringr)
+library(spatstat.geom)
+library(spatstat.explore)
+
+day_birds.pj <- flight_lines.pj %>%
+  filter (
+    Animal == "Bird",
+    MigrateTime == "diurnal"
+    
+  )
+
+# create a blank template of 2.5 km for the region
+regionTemplate <- rast(ext(day_birds.pj), 
+                       resolution = 2500, 
+                       crs = st_crs(day_birds.pj)$wkt)
+
+st_write(day_birds.pj, 
+         "day_birds.pj.gpkg", 
+         delete_layer = TRUE)
+
+# get the list of species to loop through
+species_list <- unique(day_birds.pj$species)
+
+# loop through the species to create the rasters
+species_rasters <- lapply(species_list, 
+                          function(sp_name) {
+                            
+                            df_sp <- day_birds.pj %>% 
+                              filter(species == sp_name)
+                            
+                            flightsRast <- rasterize(vect(df_sp), 
+                                                     regionTemplate, 
+                                                     field = 1, 
+                                                     fun = "sum", 
+                                                     background = 0)
+                            
+                            #this is for the smoothing window
+                            weightMatrix <- focalMat(flightsRast, 
+                                                     d = 5000, 
+                                                     type = "Gauss") 
+                            kdeSurface <- focal(flightsRast, 
+                                                w = weightMatrix, 
+                                                fun = sum, 
+                                                na.rm = TRUE)
+                            
+                            return(kdeSurface)
+                          })
+
+names(species_rasters) <- species_list
+
+# stack each sp raster and sum for the final mapping
+stack_day_birds <- rast(species_rasters)
+bird_day_cooccurrence <- app(stack_day_birds, 
+                                  fun = sum, 
+                                  na.rm = TRUE)
+
+# adding log transformation for mapping
+bird_day_cooccurrence_log <- app(bird_cooccurrence, 
+                                      fun = function(x) { log1p(x) })
+
+writeRaster(stack_day_birds,
+            "LKDEBirdDayRasterStack.tif",
+            overwrite = TRUE)
+
+mapview(bird_day_cooccurrence_log,
+        col.regions = viridis::inferno(256),
+        na.color = "transparent",
+        layer.name = "Core migratory areas")
+
