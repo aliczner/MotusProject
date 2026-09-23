@@ -163,7 +163,7 @@ noc.takeoff <- flight_lines %>%
   ) %>%
   # Filter for flights starting between 0 and 2 hours after sunset
   filter(
-    between(hours_since_sunset, 0, 2)
+    between(hours_since_sunset, -0.5, 2)
   )
 
 ### nocturnal landing
@@ -174,7 +174,7 @@ noc.landing <- flight_lines %>%
     Animal == "Bird") %>%  
   mutate(
     end_time = ymd_hms(tsEnd_dt),
-    sunrise_time_dt = ymd_hms(sunset_utc_previous),
+    sunrise_time_dt = ymd_hms(sunrise_utc_previous),
     
     sunrise_raw_diff = as.numeric(difftime(end_time, 
                                            sunrise_time_dt, 
@@ -192,7 +192,7 @@ noc.landing <- flight_lines %>%
 ) %>%
 
   filter(
-    between(hours_relative_to_sunrise, -2, 0)
+    between(hours_relative_to_sunrise, -4, 0.5)
   )
 
 
@@ -582,4 +582,80 @@ mapview(bird_day_cooccurrence_log,
         col.regions = viridis::inferno(256),
         na.color = "transparent",
         layer.name = "Core migratory areas")
+
+#======================================================================
+# Multispecies Line Kernel Density Estimation Overlay bats
+#======================================================================
+library(terra)
+library(sf)
+library(dplyr)
+library(purrr)
+library(mapview)
+library(stringr)
+library(spatstat.geom)
+library(spatstat.explore)
+
+all_bats.pj <- flight_lines.pj %>%
+  filter (
+    Animal == "Bat"
+  )
+
+# create a blank template of 2.5 km for the region
+regionTemplate <- rast(ext(all_bats.pj), 
+                       resolution = 2500, 
+                       crs = st_crs(all_bats.pj)$wkt)
+
+st_write(all_bats.pj, 
+         "all_bats.pj.gpkg", 
+         delete_layer = TRUE)
+
+# get the list of species to loop through
+species_list <- unique(all_bats.pj$species)
+
+# loop through the species to create the rasters
+species_rasters <- lapply(species_list, 
+                          function(sp_name) {
+                            
+                            df_sp <- all_bats.pj %>% 
+                              filter(species == sp_name)
+                            
+                            flightsRast <- rasterize(vect(df_sp), 
+                                                     regionTemplate, 
+                                                     field = 1, 
+                                                     fun = "sum", 
+                                                     background = 0)
+                            
+                            #this is for the smoothing window
+                            weightMatrix <- focalMat(flightsRast, 
+                                                     d = 5000, 
+                                                     type = "Gauss") 
+                            kdeSurface <- focal(flightsRast, 
+                                                w = weightMatrix, 
+                                                fun = sum, 
+                                                na.rm = TRUE)
+                            
+                            return(kdeSurface)
+                          })
+
+names(species_rasters) <- species_list
+
+# stack each sp raster and sum for the final mapping
+stack_bats <- rast(species_rasters)
+bats_cooccurrence <- app(stack_bats, 
+                             fun = sum, 
+                             na.rm = TRUE)
+
+# adding log transformation for mapping
+bats_cooccurrence_log <- app(bats_cooccurrence, 
+                                 fun = function(x) { log1p(x) })
+
+writeRaster(stack_bats,
+            "LKDEBatsRasterStack.tif",
+            overwrite = TRUE)
+
+mapview(bats_cooccurrence_log,
+        col.regions = viridis::inferno(256),
+        na.color = "transparent",
+        layer.name = "Core migratory areas")
+
 

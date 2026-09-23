@@ -189,7 +189,7 @@ htmltools::tags$iframe(
 
 ```
 
-### This is the selection frequency for nocturnal landing (58 obs, 14 species)
+### This is the selection frequency for nocturnal landing (683 obs, 33 species)
 
 ```{r}
 #| echo: false
@@ -214,6 +214,22 @@ htmltools::tags$iframe(
 
 htmltools::tags$iframe(
   src = "prioritizrOutput/day_birds/Selection_Frequency_Map_day_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### The selection frequency for all bats (59 obs, 4 species)
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/all_bats/Selection_Frequency_Map_all_bats.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"

@@ -185,8 +185,17 @@ flight_noc_land.pj<- st_read("flight_noc_land.pj.gpkg")
 nocLand_results <- prioritizrPrep_pipeline(flight_noc_land.pj, 
                                               regionTemplate, 
                                               group_name = "nocturnal_land")
+#diurnal birds all
+flight_day_birds.pj <- st_read("day_birds.pj.gpkg")
+daybird_results <-  prioritizrPrep_pipeline(flight_day_birds.pj,
+                                            regionTemplate,
+                                            group_name = "day_birds")
 
-
+# all bats
+all_bats.pj <- st_read("all_bats.pj.gpkg")
+bats_results <-  prioritizrPrep_pipeline(all_bats.pj,
+                                         regionTemplate,
+                                         group_name = "all_bats")
 
 #========================================================
 # prioritizr
@@ -303,6 +312,13 @@ nocturnal_bird_takeoff <- prioritizr_pipeline(group_name = "nocturnal_takeoff")
 
 nocturnal_bird_land <- prioritizr_pipeline(group_name = "nocturnal_land")
 
+#diurnal birds all
+
+diurnal_bird_results <- prioritizr_pipeline(group_name = "day_birds")
+
+#all bats
+
+all_bats_results <- prioritizr_pipeline(group_name = "all_bats")
 
 #================================================
 # evaluating prioritizr outputs
@@ -399,6 +415,8 @@ evaluate_scenarios <- function(group_name,
 noc_birds_evaluate <- evaluate_scenarios("nocturnal_birds")
 noc_takeoff_evaluate <- evaluate_scenarios("nocturnal_takeoff")
 noc_land_evaluate <- evaluate_scenarios("nocturnal_land")
+day_birds_evaluate <- evaluate_scenarios("day_birds")
+all_bats <- evaluate_scenarios("all_bats")
 
 #=============================================================
 #plotting the prioritizr results
@@ -509,6 +527,8 @@ plot_group_scenario_maps <- function(group_name,
 nocturnal_bird_map <- plot_group_scenario_maps("nocturnal_birds")
 nocturnal_takeoff_map <- plot_group_scenario_maps("nocturnal_takeoff")
 nocturnal_land_map <- plot_group_scenario_maps("nocturnal_land")
+day_birds_map <- plot_group_scenario_maps("day_birds")
+all_bats_map <- plot_group_scenario_maps("all_bats")
 
 #=========================================================
 # Selection frequency plot
@@ -624,6 +644,7 @@ plot_selection_frequency <- function(group_name) {
       color = "black",
       fill = NA,
       size = 2,
+      stroke = 0.3,
       shape = 21
     ) +
     labs(
@@ -652,10 +673,11 @@ plot_selection_frequency <- function(group_name) {
 }
 
 noc_birds_selection <- plot_selection_frequency("nocturnal_birds")
-
 noc_take_selection <- plot_selection_frequency("nocturnal_takeoff")
-
 noc_land_selection <- plot_selection_frequency("nocturnal_land")
+day_bird_selection <- plot_selection_frequency("day_birds")
+all_bats_selection <- plot_selection_frequency("all_bats")
+
 #================================================================
 #irreplaceability map
 #================================================================
@@ -811,3 +833,5 @@ plot_group_irreplaceability_7 <- function(group_name,
 noc_bird_irr <- plot_group_irreplaceability_7("nocturnal_birds")
 noc_take_irr <- plot_group_irreplaceability_7("nocturnal_takeoff")
 noc_land_irr <- plot_group_irreplaceability_7("nocturnal_land")
+day_bird_irr <- plot_group_irreplaceability_7("day_birds")
+all_bats_irr <- plot_group_irreplaceability_7("all_bats")
