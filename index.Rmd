@@ -36,6 +36,20 @@ Sys.setenv(TZ = "UTC")
 
 ```
 
+## Density of flights by longitude
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("SpringLongitudeDistributions.png")
+
+```
+
+
 ## Barplot of flight times by  migration timing categories for each species
 
 Species were categorized by Winger et al 2019, Ralph 1981, Dufour et al 2026, Cornell BOW
