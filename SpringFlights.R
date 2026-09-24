@@ -58,7 +58,8 @@ flight_time_summary <- flight_lines %>%
   group_by(MigrateTime, species) %>%
   mutate(
     total_flights = sum(n),
-    percentage = (n / total_flights) * 100
+    percentage = (n / total_flights) * 100,
+    species_label = paste0(species, " (", total_flights, ")")
   ) %>%
   ungroup()
 
@@ -67,7 +68,7 @@ library(ggplot2)
 # diurnal barplot
 plot_diurnal <- flight_time_summary %>%
   filter(MigrateTime == "diurnal") %>%
-  ggplot(aes(x = reorder(species, percentage), 
+  ggplot(aes(x = reorder(species_label, percentage), 
              y = percentage, 
              fill = diel_period)) +
   geom_col(position = "stack") +
@@ -91,7 +92,7 @@ plot_diurnal <- flight_time_summary %>%
 # Mixed  Plot
 plot_mixed <- flight_time_summary %>%
   filter(MigrateTime == "mixed") %>%
-  ggplot(aes(x = reorder(species, percentage), 
+  ggplot(aes(x = reorder(species_label, percentage), 
              y = percentage, 
              fill = diel_period)) +
   geom_col(position = "stack") +
@@ -115,7 +116,7 @@ plot_mixed <- flight_time_summary %>%
 # nocturnal
 plot_nocturnal <- flight_time_summary %>%
   filter(MigrateTime == "nocturnal") %>%
-  ggplot(aes(x = reorder(species, percentage), 
+  ggplot(aes(x = reorder(species_label, percentage), 
              y = percentage, 
              fill = diel_period)) +
   geom_col(position = "stack") +
