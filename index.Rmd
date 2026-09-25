@@ -36,7 +36,7 @@ Sys.setenv(TZ = "UTC")
 
 ```
 
-## Density of flights by longitude
+### Density of flights by longitude in spring
 
 
 ```{r}
@@ -46,6 +46,18 @@ Sys.setenv(TZ = "UTC")
 #| out-width: "100%"
 
 knitr::include_graphics("SpringLongitudeDistributions.png")
+
+```
+
+
+### Density of flights by longitude in fall
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("FallLongitudeDistributions.png")
 
 ```
 
@@ -179,7 +191,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/nocturnal_birds/Selection_Frequency_Map_nocturnal_birds.pdf",
+  src = "prioritizrOutput/Spring/nocturnal_birds/Selection_Frequency_Map_nocturnal_birds.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -195,7 +207,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/nocturnal_takeoff/Selection_Frequency_Map_nocturnal_takeoff.pdf",
+  src = "prioritizrOutput/Spring/nocturnal_takeoff/Selection_Frequency_Map_nocturnal_takeoff.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -211,7 +223,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/nocturnal_land/Selection_Frequency_Map_nocturnal_land.pdf",
+  src = "prioritizrOutput/Spring/nocturnal_land/Selection_Frequency_Map_nocturnal_land.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -227,7 +239,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/day_birds/Selection_Frequency_Map_day_birds.pdf",
+  src = "prioritizrOutput/Spring/day_birds/Selection_Frequency_Map_day_birds.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -243,7 +255,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/all_bats/Selection_Frequency_Map_all_bats.pdf",
+  src = "prioritizrOutput/Spring/all_bats/Selection_Frequency_Map_all_bats.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -275,7 +287,7 @@ This is rank importance of all Nocturnal Birds
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/nocturnal_birds/Scenario_7_Rank_Importance_Map.pdf",
+  src = "prioritizrOutput/Spring/nocturnal_birds/Scenario_7_Rank_Importance_Map.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
