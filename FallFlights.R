@@ -100,3 +100,92 @@ flight_lines %>%
     legend.position = "none", 
     strip.text = element_text(size = 11)
   )
+
+#================================================
+# checking flight timing
+#=================================================
+
+flight_time_summary <- flight_lines %>%
+  group_by(MigrateTime, species, diel_period) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(MigrateTime, species) %>%
+  mutate(
+    total_flights = sum(n),
+    percentage = (n / total_flights) * 100,
+    species_label = paste0(species, " (", total_flights, ")")
+  ) %>%
+  ungroup()
+
+library(ggplot2)
+
+# diurnal barplot
+plot_diurnal <- flight_time_summary %>%
+  filter(MigrateTime == "diurnal") %>%
+  ggplot(aes(x = reorder(species_label, percentage), 
+             y = percentage, 
+             fill = diel_period)) +
+  geom_col(position = "stack") +
+  coord_flip() +
+  scale_fill_manual (
+    values = c (
+      "daylight" = "#ECA72C",
+      "night" = "#31263E"
+    )) +
+  labs(
+    title = "Fall Diurnal",
+    x = "",
+    y = "Percentage of Flights (%)",
+    fill = "Diel Period"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom"
+  )
+
+# Mixed  Plot
+plot_mixed <- flight_time_summary %>%
+  filter(MigrateTime == "mixed") %>%
+  ggplot(aes(x = reorder(species_label, percentage), 
+             y = percentage, 
+             fill = diel_period)) +
+  geom_col(position = "stack") +
+  coord_flip() +
+  scale_fill_manual (
+    values = c (
+      "daylight" = "#ECA72C",
+      "night" = "#31263E"
+    )) +
+  labs(
+    title = "Fall Mixed",
+    x = "",
+    y = "Percentage of Flights (%)",
+    fill = "Diel Period"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom"
+  )
+
+# nocturnal
+plot_nocturnal <- flight_time_summary %>%
+  filter(MigrateTime == "nocturnal") %>%
+  ggplot(aes(x = reorder(species_label, percentage), 
+             y = percentage, 
+             fill = diel_period)) +
+  geom_col(position = "stack") +
+  coord_flip() +
+  scale_fill_manual (
+    values = c (
+      "daylight" = "#ECA72C",
+      "night" = "#31263E"
+    )) +
+  labs(
+    title = "Fall Nocturnal",
+    x = "",
+    y = "Percentage of Flights (%)",
+    fill = "Diel Period"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom"
+  )

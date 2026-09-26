@@ -68,7 +68,7 @@ Species were categorized by Winger et al 2019, Ralph 1981, Dufour et al 2026, Co
 
 Flights are colour coded by the timing of the flight: daytime, mixed (day and night) or night flight
 
-### diurnal species
+### diurnal spring species
 
 ```{r}
 #| echo: false
@@ -80,7 +80,8 @@ knitr::include_graphics("DiurnalFlightsBarplot.png")
 
 ```
 
-### mixed species 
+
+### mixed spring species 
 
 ```{r}
 #| echo: false
@@ -92,7 +93,7 @@ knitr::include_graphics("MixedFlightsBarplot.png")
 
 ```
 
-### nocturnal species
+### nocturnal spring species
 
 ```{r}
 #| echo: false
@@ -101,6 +102,42 @@ knitr::include_graphics("MixedFlightsBarplot.png")
 #| out-width: "100%"
 
 knitr::include_graphics("NocturnalFlightsBarplot.png")
+
+```
+
+### diurnal fall species
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("FallDiurnalFlightsBarplot.png")
+
+```
+
+## mixed fall species
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("FallMixedFlightsBarplot.png")
+
+```
+
+## nocturnal fall species
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("FallNocturnalFlightsBarplot.png")
 
 ```
 
