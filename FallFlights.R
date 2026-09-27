@@ -189,3 +189,64 @@ plot_nocturnal <- flight_time_summary %>%
   theme(
     legend.position = "bottom"
   )
+
+#==============================================================
+# partitioning night flights for nocturnal migrants
+#==============================================================
+# If the flight starts in the morning  its true starting sunset 
+# was actually on the previous calendar day (- 1 day).
+# Otherwise, it belongs to the sunset of the current calendar day.
+
+### nocturnal take off
+noc.takeoff <- flight_lines %>%  
+  filter(MigrateTime == "nocturnal",
+         Animal == "Bird") %>%  
+  mutate(
+    start_time = ymd_hms(tsStart_dt),
+    sunset_time_dt = ymd_hms(sunset_utc_previous),
+    true_sunset = if_else(
+      hour(start_time) < 12, 
+      sunset_time_dt - days(1), 
+      sunset_time_dt
+    ),
+    
+    # Calculate continuous positive hours
+    hours_since_sunset = as.numeric(difftime(start_time, 
+                                             true_sunset, 
+                                             units = "hours"))
+  ) %>%
+  # Filter for flights starting between 0 and 2 hours after sunset
+  filter(
+    between(hours_since_sunset, -0.5, 2)
+  )
+
+### nocturnal landing
+
+noc.landing <- flight_lines %>%  
+  filter(
+    MigrateTime == "nocturnal",
+    Animal == "Bird") %>%  
+  mutate(
+    end_time = ymd_hms(tsEnd_dt),
+    sunrise_time_dt = ymd_hms(sunrise_utc_previous),
+    
+    sunrise_raw_diff = as.numeric(difftime(end_time, 
+                                           sunrise_time_dt, 
+                                           units = "hours")),
+    true_sunrise = case_when(
+      sunrise_raw_diff > 12  ~ sunrise_time_dt + days(1),
+      sunrise_raw_diff < -12 ~ sunrise_time_dt - days(1),
+      TRUE                   ~ sunrise_time_dt
+    ),
+    
+    # Calculate hours relative to sunrise (negative means before sunrise) 
+    hours_relative_to_sunrise = as.numeric(difftime(end_time, 
+                                                    true_sunrise, 
+                                                    units = "hours"))
+  ) %>%
+  
+  filter(
+    between(hours_relative_to_sunrise, -4, 0.5)
+  )
+
+
