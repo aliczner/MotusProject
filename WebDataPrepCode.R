@@ -482,7 +482,7 @@ animalInfo <- animalInfo %>%
 
 
 #===================================================================
-#histograms of takeoff/landing
+#histograms of takeoff/landing for spring
 #===================================================================
 
 #spring night flights departure
@@ -567,6 +567,93 @@ ggplot(spring_night_end, aes(x = hours_relative_to_sunrise)) +
     y = "Number of Flights"
   ) +
   theme_minimal()
+
+#=============================================================
+# histograms of takeoff and landing for fall
+#=============================================================
+
+#fall night flights departure
+fall_night_flights_start <- animalInfo %>%
+  filter(season == "Fall Migration" & 
+           flight_type == "flight" &
+           diel_period == "night" &
+           Animal == "Bird") %>% 
+  group_by(tagDeployID, flight_number) %>% 
+  slice_min(tsStart_dt,
+            n=1,
+            with_ties = FALSE) %>%  #makes sure only 1 row is selected
+  mutate(
+    sunset_dt_previous = ymd_hms(sunset_utc_previous),
+    
+    sunset_raw_diff = as.numeric(difftime(tsStart_dt, 
+                                          sunset_dt_previous, 
+                                          units = "hours")),
+    
+    # Adjust sunset based on if it is >12 hrs
+    effective_sunset = case_when(
+      sunset_raw_diff >= 12  ~ sunset_dt_previous + days(1),
+      sunset_raw_diff <= -12 ~ sunset_dt_previous - days(1),
+      TRUE                  ~ sunset_dt_previous
+    ),
+    
+    hours_relative_to_sunset = as.numeric(difftime(
+      tsStart_dt, 
+      effective_sunset, 
+      units = "hours"
+    ))
+  )
+
+# make the histogram
+ggplot(fall_night_flights_start, aes(x = hours_relative_to_sunset)) +
+  geom_histogram(binwidth = 0.5, fill = "#202C59", color = "white") +
+  labs(
+    title = "Fall Night Flight: Start",
+    x = "Hours Since Sunset",
+    y = "Number of Flights"
+  ) +
+  theme_minimal()
+
+
+#Fall night flight end/landing
+fall_night_end <- animalInfo %>%
+  filter(season == "Fall Migration" &  
+           flight_type == "flight" &
+           diel_period %in% c("night") &
+           Animal == "Bird") %>%  
+  group_by(tagDeployID, flight_number) %>% 
+  slice_max(tsEnd_dt, 
+            n = 1, 
+            with_ties = FALSE) %>% 
+  mutate(
+    sunrise_dt_current = ymd_hms(sunrise_utc_current),
+    
+    raw_diff = as.numeric(difftime(tsEnd_dt, 
+                                   sunrise_dt_current, 
+                                   units = "hours")),
+    
+    # Adjust sunrise based on if it is >12 hrs
+    effective_sunrise = case_when(
+      raw_diff > 12 ~ sunrise_dt_current + days(1),# Sunrise is yesterday; shift forward
+      raw_diff < -12 ~ sunrise_dt_current - days(1),# Sunrise is tomorrow; shift backward
+      TRUE           ~ sunrise_dt_current 
+    ),
+    
+    hours_relative_to_sunrise = as.numeric(difftime(
+      tsEnd_dt, 
+      effective_sunrise, 
+      units = "hours"
+    ))
+  )
+
+ggplot(fall_night_end, aes(x = hours_relative_to_sunrise)) +
+  geom_histogram(binwidth = 0.5, fill = "#EF3054", color = "white") +
+  labs(
+    title = "Fall Night Flights: End Time",
+    x = "Hours Relative to Sunrise (0 = Sunrise)",
+    y = "Number of Flights"
+  ) +
+  theme_minimal()
+
 
 
 #=======================================================

@@ -167,7 +167,7 @@ datatable(
 
 ## Histogram of Departure/Landing
 
-## Departure flights
+### Departure flights for spring
 
 These are spring flights of just birds at night. Only the first detection of a flight for an individual was included (i.e., if the flight had multiple steps, only the first step was included)
 
@@ -181,6 +181,8 @@ knitr::include_graphics("HistSpringNightFlightStart.png")
 
 ```
 
+### Landing flights for spring
+
 ```{r}
 #| echo: false
 #| message: false
@@ -191,7 +193,29 @@ knitr::include_graphics("HistSpringNightFlightEnd.png")
 
 ```
 
+### departure flights for Fall
 
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("HistFallNightFlightStart.png")
+
+```
+
+### landing flights fall
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("HistFallNightFlightEnd.png")
+
+```
 
 ## Key Migration Areas
 
