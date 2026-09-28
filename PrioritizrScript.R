@@ -67,28 +67,28 @@ regionTemplate[!is.na(regionTemplate)] <- 0
 ### turning the data prep from above into a function for rerunning
 
 prioritizrPrep_pipeline <- function(group_sf, 
-                                    regionTemplate, 
                                     group_name, 
-                                    percentiles = c(0.75, 
-                                                    0.50, 
-                                                    0.30)) {
+                                    season = "Fall_Migration",   
+                                    percentiles = c(0.75, 0.50, 0.30)) {
   
-  message(sprintf("Processing spatial layers for: %s...", 
-                  group_name))
+  message(sprintf("Processing spatial layers for %s (%s)...", group_name, season))
   
-  # create file path
-  output_dir <- file.path("prioritizrOutput", 
-                          group_name)
+  # Create file path with the season folder nested in between
+  output_dir <- file.path("prioritizrOutput", season, group_name)
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
+  
+  #  Build the 2.5 km region template internally from your group data
+  regionTemplate <- rast(ext(group_sf), 
+                         resolution = 2500, 
+                         crs = st_crs(group_sf)$wkt)
   
   # Get the species list 
   species_list <- unique(group_sf$species)
   
   # Loop through species to create rasters and apply Gaussian smoothing (KDE)
-  species_rasters <- lapply(species_list, 
-                            function(sp_name) {
+  species_rasters <- lapply(species_list, function(sp_name) {
     
     df_sp <- group_sf %>% filter(species == sp_name)
     
@@ -113,10 +113,10 @@ prioritizrPrep_pipeline <- function(group_sf,
   
   names(species_rasters) <- species_list
   
-  # stack species rasters
+  # Stack species rasters
   all_stack <- rast(species_rasters)
   
-  # thresholding function 
+  # Thresholding function 
   apply_threshold <- function(rast_stack, top_pct) {
     thresh_stack <- rast_stack
     for (i in 1:nlyr(thresh_stack)) {
@@ -142,13 +142,10 @@ prioritizrPrep_pipeline <- function(group_sf,
   results_list <- list()
   for (pct in percentiles) {
     pct_label <- paste0("top", pct * 100)
-    thresh_stack <- apply_threshold(all_stack,
-                                    pct)
+    thresh_stack <- apply_threshold(all_stack, pct)
     
-    file_path <- file.path(output_dir, paste0(group_name, 
-                                              "_", 
-                                              pct_label, 
-                                              ".tif"))
+    file_path <- file.path(output_dir, paste0(group_name, "_", pct_label, ".tif"))
+    
     writeRaster(thresh_stack, 
                 file_path, 
                 overwrite = TRUE)
@@ -164,9 +161,12 @@ prioritizrPrep_pipeline <- function(group_sf,
   results_list[["cost_layer"]] <- cost_layer
   results_list[["raw_stack"]] <- all_stack
   
-  message(sprintf("Finished processing and saved files for: %s!", group_name))
+  message(sprintf("Finished processing and saved files for: %s (%s)!", group_name, season))
   return(results_list)
 }
+
+
+
 ### applying function to each group
 
 #all nocturnal birds
@@ -197,23 +197,36 @@ bats_results <-  prioritizrPrep_pipeline(all_bats.pj,
                                          regionTemplate,
                                          group_name = "all_bats")
 
+# fall 
+
+# fall nocturnal bird migration
+fall_noc_birds.pj<- st_read("fall_all_Bird_nocturnal.gpkg")
+
+fall_noc_birds_results <- prioritizrPrep_pipeline(
+  group_sf = fall_noc_birds.pj,
+  group_name = "nocturnal_birds",
+  season  = "Fall Migration"
+)
+
+
 #========================================================
 # prioritizr
 # =======================================================
 
 prioritizr_pipeline <- function(group_name, 
+                                season = "Fall Migration", # Added season argument
                                 thresholds = c(0.75, 0.50, 0.30),
                                 targets = c(0.17, 0.30, 0.50)) {
   
-  # get output path
-  output_dir <- file.path("prioritizrOutput", group_name)
+  # Get the nested output/input path matching the preparation pipeline
+  output_dir <- file.path("prioritizrOutput", season, group_name)
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
   
-  #  Load the pre-saved thresholded stacks from the group's nested directory
+  # Load the pre-saved thresholded stacks from the season/group's nested directory
   stack_top75 <- rast(file.path(output_dir, 
-                                paste0(group_name,
+                                paste0(group_name, 
                                        "_top75.tif")))
   stack_top50 <- rast(file.path(output_dir, 
                                 paste0(group_name, 
@@ -268,6 +281,7 @@ prioritizr_pipeline <- function(group_name,
     scenario_output <- list(
       scenario_id = i,
       group = group_name,
+      season = season,
       threshold = curr_thresh,
       target = curr_target,
       solution_raster = solution
@@ -287,10 +301,11 @@ prioritizr_pipeline <- function(group_name,
     saveRDS(scenario_output_wrapped, 
             file = save_path)
     
-    message(sprintf("Completed & Saved Scenario %d of %d for [%s] -> Thresh: %.2f | Target: %.2f", 
+    message(sprintf("Completed & Saved Scenario %d of %d for [%s - %s] -> Thresh: %.2f | Target: %.2f", 
                     i, 
                     nrow(scenarios), 
                     group_name, 
+                    season,
                     curr_thresh, 
                     curr_target))
   }
@@ -320,15 +335,26 @@ diurnal_bird_results <- prioritizr_pipeline(group_name = "day_birds")
 
 all_bats_results <- prioritizr_pipeline(group_name = "all_bats")
 
+## Fall
+
+fall_noc_solutions <- prioritizr_pipeline(
+  group_name = "nocturnal_birds",
+  season     = "Fall Migration"
+)
+
+
 #================================================
 # evaluating prioritizr outputs
 #================================================
 
 evaluate_scenarios <- function(group_name, 
+                               season = "Fall Migration",
                                total_scenarios = 9) {
   
   # file path
-  output_dir <- file.path("prioritizrOutput", group_name)
+  output_dir <- file.path("prioritizrOutput",
+                          season,
+                          group_name)
   
   # load thresholded rasterstacks
   stack_top75 <- rast(file.path(output_dir, paste0(group_name, "_top75.tif")))
@@ -418,6 +444,11 @@ noc_land_evaluate <- evaluate_scenarios("nocturnal_land")
 day_birds_evaluate <- evaluate_scenarios("day_birds")
 all_bats <- evaluate_scenarios("all_bats")
 
+fall_noc_eval <- evaluate_scenarios(
+  group_name= "nocturnal_birds",
+  season = "Fall Migration",
+  total_scenarios = 9
+)
 #=============================================================
 #plotting the prioritizr results
 #=============================================================

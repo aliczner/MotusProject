@@ -248,5 +248,120 @@ noc.landing <- flight_lines %>%
   filter(
     between(hours_relative_to_sunrise, -4, 0.5)
   )
+#==================================================================
+# Multispecies Line Kernel Density Estimation Function
+#===================================================================
+library(terra)
+library(sf)
+library(dplyr)
+library(purrr)
+library(mapview)
+library(stringr)
+library(spatstat.geom)
+library(spatstat.explore)
 
+generate_lkde_surface <- function(data, 
+                                  animal_group, 
+                                  migrate_time, 
+                                  output_prefix = "migration") {
+  
+  # Filter data based on function arguments
+  filtered_data <- data %>%
+    filter(
+      Animal == animal_group,
+      MigrateTime == migrate_time
+    )
+  
+  if (nrow(filtered_data) == 0) {
+    stop("No rows match the specified Animal and MigrateTime combination.")
+  }
+  
+  # Create a blank template of 2.5 km for the region
+  regionTemplate <- rast(ext(filtered_data), 
+                         resolution = 2500, 
+                         crs = st_crs(filtered_data)$wkt)
+  
+  # write out filtered layer if needed
+  gpkg_name <- paste0(output_prefix, 
+                      "_", 
+                      animal_group, 
+                      "_",
+                      migrate_time,
+                      ".gpkg")
+  st_write(filtered_data, 
+           gpkg_name, 
+           delete_layer = TRUE,
+           quiet = TRUE)
+  
+  #list of species to loop through
+  species_list <- unique(filtered_data$species)
+  
+  # Loop through the species to create individual KDE rasters
+  species_rasters <- lapply(species_list, function(sp_name) {
+    
+    df_sp <- filtered_data %>% 
+      filter(species == sp_name)
+    
+    flightsRast <- rasterize(vect(df_sp), 
+                             regionTemplate, 
+                             field = 1, 
+                             fun = "sum", 
+                             background = 0)
+    
+    # Smoothing window (Gaussian Kernel)
+    weightMatrix <- focalMat(flightsRast, 
+                             d = 5000, 
+                             type = "Gauss") 
+    
+    kdeSurface <- focal(flightsRast, 
+                        w = weightMatrix, 
+                        fun = sum, 
+                        na.rm = TRUE)
+    
+    return(kdeSurface)
+  })
+  
+  names(species_rasters) <- species_list
+  
+  # Stack each species raster and sum for co-occurrence
+  stack_rasters <- rast(species_rasters)
+  cooccurrence_surface <- app(stack_rasters, 
+                              fun = sum, 
+                              na.rm = TRUE)
+  
+  # Log transformation for mapping
+  cooccurrence_log <- app(cooccurrence_surface, 
+                          fun = function(x) { log1p(x) })
+  
+  # Save raster stack output
+  tiff_name <- paste0("LKDE_RasterStack_Fall_", 
+                      animal_group, 
+                      "_", 
+                      migrate_time, 
+                      ".tif")
+  writeRaster(stack_rasters, 
+              tiff_name,
+              overwrite = TRUE)
+  
+  # Return a list containing your final spatial products
+  return(list(
+    filtered_data = filtered_data,
+    species_stack = stack_rasters,
+    cooccurrence_surface = cooccurrence_surface,
+    cooccurrence_log = cooccurrence_log
+  ))
+}
 
+## running the function
+
+fall_night_bird_results <- generate_lkde_surface(
+  data         = flight_lines.pj, 
+  animal_group = "Bird", 
+  migrate_time = "nocturnal",
+  output_prefix= "fall_all"
+)
+
+mapview(fall_night_bird_results$cooccurrence_log,
+        col.regions = viridis::inferno(256),
+        na.color = "transparent",
+        layer.name = "Core migratory areas")
