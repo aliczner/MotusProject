@@ -219,7 +219,9 @@ prioritizr_pipeline <- function(group_name,
                                 targets = c(0.17, 0.30, 0.50)) {
   
   # Get the nested output/input path matching the preparation pipeline
-  output_dir <- file.path("prioritizrOutput", season, group_name)
+  output_dir <- file.path("prioritizrOutput", 
+                          season, 
+                          group_name)
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
@@ -339,7 +341,7 @@ all_bats_results <- prioritizr_pipeline(group_name = "all_bats")
 
 fall_noc_solutions <- prioritizr_pipeline(
   group_name = "nocturnal_birds",
-  season     = "Fall Migration"
+  season = "Fall Migration"
 )
 
 
@@ -449,6 +451,8 @@ fall_noc_eval <- evaluate_scenarios(
   season = "Fall Migration",
   total_scenarios = 9
 )
+
+
 #=============================================================
 #plotting the prioritizr results
 #=============================================================
@@ -460,10 +464,13 @@ library(ggplot2)
 library(tidyterra)
 
 plot_group_scenario_maps <- function(group_name, 
+                                     season = "Fall Migration",
                                      total_scenarios = 9) {
   
   # creating the output paths
-  output_dir <- file.path("prioritizrOutput", group_name)
+  output_dir <- file.path("prioritizrOutput", 
+                          season,
+                          group_name)
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
     message(sprintf("Created nested directory: '%s'", output_dir))
@@ -561,6 +568,14 @@ nocturnal_land_map <- plot_group_scenario_maps("nocturnal_land")
 day_birds_map <- plot_group_scenario_maps("day_birds")
 all_bats_map <- plot_group_scenario_maps("all_bats")
 
+## fall
+
+plot_group_scenario_maps(
+  group_name  = "nocturnal_birds",
+  season  = "Fall Migration",
+  total_scenarios = 9
+)
+
 #=========================================================
 # Selection frequency plot
 #=========================================================
@@ -589,10 +604,12 @@ stations_pj2 <- stations_pj %>%
 
 ## selection frequency plot function 
 
-plot_selection_frequency <- function(group_name) {
+plot_selection_frequency <- function(group_name,
+                                     season = "Fall migration") {
   
   # define file path
   output_dir <- file.path("prioritizrOutput", 
+                          season,
                           group_name)
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, 
@@ -709,6 +726,13 @@ noc_land_selection <- plot_selection_frequency("nocturnal_land")
 day_bird_selection <- plot_selection_frequency("day_birds")
 all_bats_selection <- plot_selection_frequency("all_bats")
 
+## fall
+
+fall_noc_freq_map <- plot_selection_frequency(
+  group_name = "nocturnal_birds",
+  season = "Fall Migration"
+)
+
 #================================================================
 #irreplaceability map
 #================================================================
@@ -742,12 +766,15 @@ print(all_scenarios) #scenario 7 matches
 ### function to make irreplaceabiltiy maps for each group
 
 plot_group_irreplaceability_7 <- function(group_name, 
+                                          season = "Fall migration",
                                           raster_stack_path = NULL) {
   
   message(sprintf("Processing irreplaceability map for: %s...", group_name))
   
   # define the path
-  output_dir <- file.path("prioritizrOutput", group_name)
+  output_dir <- file.path("prioritizrOutput", 
+                          season,
+                          group_name)
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
@@ -866,3 +893,10 @@ noc_take_irr <- plot_group_irreplaceability_7("nocturnal_takeoff")
 noc_land_irr <- plot_group_irreplaceability_7("nocturnal_land")
 day_bird_irr <- plot_group_irreplaceability_7("day_birds")
 all_bats_irr <- plot_group_irreplaceability_7("all_bats")
+
+##fall
+fall_noc_irr <- plot_group_irreplaceability_7(
+  group_name = "nocturnal_birds",
+  season = "Fall Migration"
+)
+

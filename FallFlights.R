@@ -32,20 +32,20 @@ fallTable <- fallData %>%
 
 library(sfheaders)
 
-flight_steps <- fallTable %>%
+fall_flight_steps <- fallTable %>%
   filter(flight_type != "incidence") %>%
   group_by(tagDeployID, flight_ID) %>%
   arrange(tsEnd_dt, .by_group = TRUE) %>%
   ungroup()
 
-geoms <- lapply(seq_len(nrow(flight_steps)), function(i) {
+geoms <- lapply(seq_len(nrow(fall_flight_steps)), function(i) {
   st_linestring(matrix(
-    c(flight_steps$lon_previous[i], flight_steps$lon[i],
-      flight_steps$lat_previous[i], flight_steps$lat[i]),
+    c(fall_flight_steps$lon_previous[i], fall_flight_steps$lon[i],
+      fall_flight_steps$lat_previous[i], fall_flight_steps$lat[i]),
     ncol = 2
   ))
 })
-flight_lines <- st_sf(flight_steps, 
+fall_flight_lines <- st_sf(fall_flight_steps, 
                       geometry = st_sfc(geoms, 
                                         crs = 4326))
 
@@ -56,7 +56,7 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 
-flight_lines %>%
+fall_flight_lines %>%
   select(lon, lon_previous, lon_tagSite) %>%
   pivot_longer(
     cols = c(lon, lon_previous, lon_tagSite),
@@ -105,7 +105,7 @@ flight_lines %>%
 # checking flight timing
 #=================================================
 
-flight_time_summary <- flight_lines %>%
+fall_flight_time_summary <- fall_flight_lines %>%
   group_by(MigrateTime, species, diel_period) %>%
   summarise(n = n(), .groups = "drop") %>%
   group_by(MigrateTime, species) %>%
@@ -119,7 +119,7 @@ flight_time_summary <- flight_lines %>%
 library(ggplot2)
 
 # diurnal barplot
-plot_diurnal <- flight_time_summary %>%
+fall_plot_diurnal <- fall_flight_time_summary %>%
   filter(MigrateTime == "diurnal") %>%
   ggplot(aes(x = reorder(species_label, percentage), 
              y = percentage, 
@@ -143,7 +143,7 @@ plot_diurnal <- flight_time_summary %>%
   )
 
 # Mixed  Plot
-plot_mixed <- flight_time_summary %>%
+fall_plot_mixed <- fall_flight_time_summary %>%
   filter(MigrateTime == "mixed") %>%
   ggplot(aes(x = reorder(species_label, percentage), 
              y = percentage, 
@@ -167,7 +167,7 @@ plot_mixed <- flight_time_summary %>%
   )
 
 # nocturnal
-plot_nocturnal <- flight_time_summary %>%
+fall_plot_nocturnal <- fall_flight_time_summary %>%
   filter(MigrateTime == "nocturnal") %>%
   ggplot(aes(x = reorder(species_label, percentage), 
              y = percentage, 
@@ -198,7 +198,7 @@ plot_nocturnal <- flight_time_summary %>%
 # Otherwise, it belongs to the sunset of the current calendar day.
 
 ### nocturnal take off
-noc.takeoff <- flight_lines %>%  
+fall_noc.takeoff <- fall_flight_lines %>%  
   filter(MigrateTime == "nocturnal",
          Animal == "Bird") %>%  
   mutate(
@@ -222,7 +222,7 @@ noc.takeoff <- flight_lines %>%
 
 ### nocturnal landing
 
-noc.landing <- flight_lines %>%  
+fall_noc.landing <- fall_flight_lines %>%  
   filter(
     MigrateTime == "nocturnal",
     Animal == "Bird") %>%  
@@ -263,7 +263,8 @@ library(spatstat.explore)
 generate_lkde_surface <- function(data, 
                                   animal_group, 
                                   migrate_time, 
-                                  output_prefix = "migration") {
+                                  output_prefix = "migration",
+                                  target_crs = 3978) {
   
   # Filter data based on function arguments
   filtered_data <- data %>%
@@ -276,6 +277,13 @@ generate_lkde_surface <- function(data,
     stop("No rows match the specified Animal and MigrateTime combination.")
   }
   
+  # Automatically reproject to a projected coordinate system in meters (EPSG 3978) 
+  # if it's currently in geographic coordinates (lat/long)
+  if (st_is_longlat(filtered_data) || is.na(st_crs(filtered_data)$epsg) || st_crs(filtered_data)$epsg != target_crs) {
+    message(sprintf("Transforming input data to CRS EPSG:%d (meters)...", target_crs))
+    filtered_data <- st_transform(filtered_data, crs = target_crs)
+  }
+  
   # Create a blank template of 2.5 km for the region
   regionTemplate <- rast(ext(filtered_data), 
                          resolution = 2500, 
@@ -285,7 +293,7 @@ generate_lkde_surface <- function(data,
   gpkg_name <- paste0(output_prefix, 
                       "_", 
                       animal_group, 
-                      "_",
+                      "_", 
                       migrate_time,
                       ".gpkg")
   st_write(filtered_data, 
@@ -293,7 +301,7 @@ generate_lkde_surface <- function(data,
            delete_layer = TRUE,
            quiet = TRUE)
   
-  #list of species to loop through
+  # list of species to loop through
   species_list <- unique(filtered_data$species)
   
   # Loop through the species to create individual KDE rasters
@@ -308,15 +316,22 @@ generate_lkde_surface <- function(data,
                              fun = "sum", 
                              background = 0)
     
-    # Smoothing window (Gaussian Kernel)
-    weightMatrix <- focalMat(flightsRast, 
-                             d = 5000, 
-                             type = "Gauss") 
-    
-    kdeSurface <- focal(flightsRast, 
-                        w = weightMatrix, 
-                        fun = sum, 
-                        na.rm = TRUE)
+    # SAFETY CHECK: Ensure the raster is large enough for the 5km focal window
+    if (nrow(flightsRast) > 2 && ncol(flightsRast) > 2) {
+      # Smoothing window (Gaussian Kernel)
+      weightMatrix <- focalMat(flightsRast, 
+                               d = 5000, 
+                               type = "Gauss") 
+      
+      kdeSurface <- focal(flightsRast, 
+                          w = weightMatrix, 
+                          fun = sum, 
+                          na.rm = TRUE)
+    } else {
+      # If the extent is too tiny, return the unsmoothed raster with a message
+      message(sprintf("Note: Species '%s' has a spatial extent too small for 5km smoothing. Skipping focal smoothing.", sp_name))
+      kdeSurface <- flightsRast
+    }
     
     return(kdeSurface)
   })
@@ -343,7 +358,7 @@ generate_lkde_surface <- function(data,
               tiff_name,
               overwrite = TRUE)
   
-  # Return a list containing your final spatial products
+  # Return a list
   return(list(
     filtered_data = filtered_data,
     species_stack = stack_rasters,
@@ -351,11 +366,10 @@ generate_lkde_surface <- function(data,
     cooccurrence_log = cooccurrence_log
   ))
 }
-
 ## running the function
 
 fall_night_bird_results <- generate_lkde_surface(
-  data         = flight_lines.pj, 
+  data = fall_flight_lines, 
   animal_group = "Bird", 
   migrate_time = "nocturnal",
   output_prefix= "fall_all"
@@ -365,3 +379,5 @@ mapview(fall_night_bird_results$cooccurrence_log,
         col.regions = viridis::inferno(256),
         na.color = "transparent",
         layer.name = "Core migratory areas")
+
+
