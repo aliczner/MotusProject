@@ -277,7 +277,7 @@ htmltools::tags$iframe(
 
 ```
 
-### This is the selection frequency for nocturnal takeoff (761 obs, 32 species)
+### This is the selection frequency for spring nocturnal takeoff (761 obs, 32 species)
 
 ```{r}
 #| echo: false
@@ -293,7 +293,23 @@ htmltools::tags$iframe(
 
 ```
 
-### This is the selection frequency for nocturnal landing (683 obs, 33 species)
+### selection frequency for fall nocturnal takeoff
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Fall Migration/takeoff_birds/Selection_Frequency_Map_takeoff_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### This is the selection frequency for spring nocturnal landing (683 obs, 33 species)
 
 ```{r}
 #| echo: false
