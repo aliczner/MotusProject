@@ -208,6 +208,43 @@ fall_noc_birds_results <- prioritizrPrep_pipeline(
   season  = "Fall Migration"
 )
 
+#fall takeoff birds
+fall_takeoff_birds.pj<- st_read("fall_takeoff_Bird_nocturnal.gpkg")
+
+fall_takeoff_birds_results <- prioritizrPrep_pipeline(
+  group_sf = fall_takeoff_birds.pj,
+  group_name = "takeoff_birds",
+  season  = "Fall Migration"
+)
+
+#fall landing birds
+fall_land_birds.pj<- st_read("fall_land_Bird_nocturnal.gpkg")
+
+fall_land_birds_results <- prioritizrPrep_pipeline(
+  group_sf = fall_land_birds.pj,
+  group_name = "land_birds",
+  season  = "Fall Migration"
+)
+
+#fall diurnal birds
+
+fall_day_birds.pj<- st_read("fall_all_Bird_diurnal.gpkg")
+
+fall_day_birds_results <- prioritizrPrep_pipeline(
+  group_sf = fall_day_birds.pj,
+  group_name = "diurnal_birds",
+  season  = "Fall Migration"
+)
+
+#fall bats
+
+fall_bats.pj<- st_read("fall_bat_Bat_unclassified.gpkg")
+
+fall_bats_results <- prioritizrPrep_pipeline(
+  group_sf = fall_bats.pj,
+  group_name = "bats",
+  season  = "Fall Migration"
+)
 
 #========================================================
 # prioritizr
@@ -344,6 +381,30 @@ fall_noc_solutions <- prioritizr_pipeline(
   season = "Fall Migration"
 )
 
+# fall take off
+
+fall_takeoff_solutions <- prioritizr_pipeline(
+  group_name = "takeoff_birds",
+  season = "Fall Migration"
+)
+
+#fall landing
+
+fall_land_solutions <- prioritizr_pipeline(
+  group_name = "land_birds",
+  season = "Fall Migration"
+)
+
+#fall diurnal
+fall_day_solutions <- prioritizr_pipeline(
+  group_name = "diurnal_birds",
+  season = "Fall Migration"
+)
+
+fall_bats_solutions <- prioritizr_pipeline(
+  group_name = "bats",
+  season = "Fall Migration"
+)
 
 #================================================
 # evaluating prioritizr outputs
@@ -452,6 +513,26 @@ fall_noc_eval <- evaluate_scenarios(
   total_scenarios = 9
 )
 
+#fall nocturnal takeoff
+fall_takeoff_eval <- evaluate_scenarios(
+  group_name= "takeoff_birds",
+  season = "Fall Migration",
+  total_scenarios = 9
+)
+
+#fall nocturnal landing
+fall_land_eval <- evaluate_scenarios(
+  group_name= "land_birds",
+  season = "Fall Migration",
+  total_scenarios = 9
+)
+
+#fall diurnal birds
+fall_day_eval <- evaluate_scenarios(
+  group_name= "diurnal_birds",
+  season = "Fall Migration",
+  total_scenarios = 9
+)
 
 #=============================================================
 #plotting the prioritizr results
@@ -572,6 +653,36 @@ all_bats_map <- plot_group_scenario_maps("all_bats")
 
 plot_group_scenario_maps(
   group_name  = "nocturnal_birds",
+  season  = "Fall Migration",
+  total_scenarios = 9
+)
+
+#fall takeoff
+
+plot_group_scenario_maps(
+  group_name  = "takeoff_birds",
+  season  = "Fall Migration",
+  total_scenarios = 9
+)
+
+#fall nocturnal landing
+plot_group_scenario_maps(
+  group_name  = "land_birds",
+  season  = "Fall Migration",
+  total_scenarios = 9
+)
+
+#fall diurnal birds
+
+plot_group_scenario_maps(
+  group_name  = "diurnal_birds",
+  season  = "Fall Migration",
+  total_scenarios = 9
+)
+
+#fall bats
+plot_group_scenario_maps(
+  group_name  = "bats",
   season  = "Fall Migration",
   total_scenarios = 9
 )
@@ -730,6 +841,31 @@ all_bats_selection <- plot_selection_frequency("all_bats")
 
 fall_noc_freq_map <- plot_selection_frequency(
   group_name = "nocturnal_birds",
+  season = "Fall Migration"
+)
+
+#fall takeoff
+fall_takeoff_freq_map <- plot_selection_frequency(
+  group_name = "takeoff_birds",
+  season = "Fall Migration"
+)
+
+#fall nocturnal landing
+fall_land_freq_map <- plot_selection_frequency(
+  group_name = "land_birds",
+  season = "Fall Migration"
+)
+
+#fall diurnal birds
+fall_day_freq_map <- plot_selection_frequency(
+  group_name = "diurnal_birds",
+  season = "Fall Migration"
+)
+
+# fall bats
+
+fall_bats_freq_map <- plot_selection_frequency(
+  group_name = "bats",
   season = "Fall Migration"
 )
 
@@ -897,6 +1033,32 @@ all_bats_irr <- plot_group_irreplaceability_7("all_bats")
 ##fall
 fall_noc_irr <- plot_group_irreplaceability_7(
   group_name = "nocturnal_birds",
+  season = "Fall Migration"
+)
+
+#fall takeoff
+fall_takeoff_irr <- plot_group_irreplaceability_7(
+  group_name = "takeoff_birds",
+  season = "Fall Migration"
+)
+
+#fall landing
+fall_land_irr <- plot_group_irreplaceability_7(
+  group_name = "land_birds",
+  season = "Fall Migration"
+)
+
+#fall diurnal birds
+
+fall_day_irr <- plot_group_irreplaceability_7(
+  group_name = "diurnal_birds",
+  season = "Fall Migration"
+)
+
+# fall bats
+
+fall_bats_irr <- plot_group_irreplaceability_7(
+  group_name = "bats",
   season = "Fall Migration"
 )
 

@@ -366,7 +366,10 @@ generate_lkde_surface <- function(data,
     cooccurrence_log = cooccurrence_log
   ))
 }
+
 ## running the function
+
+# fall all nocturnal birds
 
 fall_night_bird_results <- generate_lkde_surface(
   data = fall_flight_lines, 
@@ -380,4 +383,58 @@ mapview(fall_night_bird_results$cooccurrence_log,
         na.color = "transparent",
         layer.name = "Core migratory areas")
 
+# fall nocturnal takeoff
 
+fall_takeoff_bird_results <- generate_lkde_surface(
+  data = fall_noc.takeoff, 
+  animal_group = "Bird", 
+  migrate_time = "nocturnal",
+  output_prefix= "fall_takeoff"
+)
+
+mapview(fall_takeoff_bird_results$cooccurrence_log,
+        col.regions = viridis::inferno(256),
+        na.color = "transparent",
+        layer.name = "Core migratory areas")
+
+#fall nocturnal landing
+
+fall_land_bird_results <- generate_lkde_surface(
+  data = fall_noc.landing, 
+  animal_group = "Bird", 
+  migrate_time = "nocturnal",
+  output_prefix= "fall_land"
+)
+
+mapview(fall_land_bird_results$cooccurrence_log,
+        col.regions = viridis::inferno(256),
+        na.color = "transparent",
+        layer.name = "Core migratory areas")
+
+# fall diurnal migrants
+
+fall_day_bird_results <- generate_lkde_surface(
+  data = fall_flight_lines, 
+  animal_group = "Bird", 
+  migrate_time = "diurnal",
+  output_prefix= "fall_all"
+)
+
+mapview(fall_day_bird_results$cooccurrence_log,
+        col.regions = viridis::inferno(256),
+        na.color = "transparent",
+        layer.name = "Core migratory areas")
+
+#bats
+
+fall_bat_results <- generate_lkde_surface(
+  data = fall_flight_lines, 
+  animal_group = "Bat", 
+  migrate_time = "unclassified",
+  output_prefix= "fall_bat"
+)
+
+mapview(fall_bat_results$cooccurrence_log,
+        col.regions = viridis::inferno(256),
+        na.color = "transparent",
+        layer.name = "Core migratory areas")

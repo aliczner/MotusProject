@@ -325,7 +325,23 @@ htmltools::tags$iframe(
 
 ```
 
-### The selection frequency for all diurnal birds (267 obs, 13 species)
+### Selection frequency for fall nocturnal landing
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Fall Migration/land_birds/Selection_Frequency_Map_land_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### The selection frequency for spring diurnal birds (267 obs, 13 species)
 
 ```{r}
 #| echo: false
@@ -341,7 +357,23 @@ htmltools::tags$iframe(
 
 ```
 
-### The selection frequency for all bats (59 obs, 4 species)
+### Selection frequency for fall diurnal migrants
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Fall Migration/diurnal_birds/Selection_Frequency_Map_diurnal_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### The selection frequency for all spring bats (59 obs, 4 species)
 
 ```{r}
 #| echo: false
@@ -350,6 +382,22 @@ htmltools::tags$iframe(
 
 htmltools::tags$iframe(
   src = "prioritizrOutput/Spring/all_bats/Selection_Frequency_Map_all_bats.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### The selection frequency for fall bats
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Fall Migration/bats/Selection_Frequency_Map_bats.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
