@@ -405,6 +405,90 @@ htmltools::tags$iframe(
 
 ```
 
+## Comparing Prioritizr output between seasons
+
+### within group comparisons
+
+### nocturnal birds
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Seasonal_Comparisons/Selection_Cat_Comparison_nocturnal_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### nocturnal birds takeoff
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Seasonal_Comparisons/Selection_Cat_Comparison_takeoff_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### nocturnal birds landing
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Seasonal_Comparisons/Selection_Cat_Comparison_land_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### diurnal birds
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Seasonal_Comparisons/Selection_Cat_Comparison_day_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### bats
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Seasonal_Comparisons/Selection_Cat_Comparison_all_bats.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
 This output (Irreplaceability Rank Importance) shows which pixels are the most important to keep for a given scenario (so this would have to be done per scenario or select among them). I picked this scenario because it is the biggest in terms of pixels so I assumed it coverd most cases. 
 In this scenario the threshold is the top 75% of the data and target of 50%
 
