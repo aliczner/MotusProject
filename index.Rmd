@@ -489,6 +489,56 @@ htmltools::tags$iframe(
 
 ```
 
+### within season comparisons
+
+### spring 
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Synthesis/Synthesis_Spring_Hotspots.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### fall
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Synthesis/Synthesis_Fall_Hotspots.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### both seasons
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/Synthesis/Synthesis_Master_Refugia.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
 This output (Irreplaceability Rank Importance) shows which pixels are the most important to keep for a given scenario (so this would have to be done per scenario or select among them). I picked this scenario because it is the biggest in terms of pixels so I assumed it coverd most cases. 
 In this scenario the threshold is the top 75% of the data and target of 50%
 

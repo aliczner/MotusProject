@@ -134,7 +134,7 @@ compare_selection_frequency <- function(group_name) {
   )
   names(cat_raster) <- "Seasonality"
   
-  # Plot with na.translate = FALSE to strip the NA legend entry and make background fully transparent
+  # Plot with na.translate = FALSE to make background fully transparent
   p <- ggplot() +
     tidyterra::geom_spatraster_rgb(data = tiles) +
     tidyterra::geom_spatraster(data = cat_raster, na.rm = TRUE, alpha = 0.9) + 
@@ -188,3 +188,217 @@ compare_selection_frequency(group_name = "day_birds")
 
 # Bats
 compare_selection_frequency(group_name = "all_bats")
+
+#===========================================================
+# identifying seasonal hotspots
+#===========================================================
+library(terra)    
+library(sf)       
+library(maptiles)
+library(tidyterra)  
+library(ggplot2)
+
+synthesize_migration_hotspots <- function() {
+  
+  # Define group lists and their matching directory 
+  guild_map <- list(
+    list(spring = "nocturnal_birds", 
+         fall = "nocturnal_birds"),
+    list(spring = "nocturnal_takeoff", 
+         fall = "takeoff_birds"),
+    list(spring = "nocturnal_land",    
+         fall = "land_birds"),
+    list(spring = "day_birds",         
+         fall = "diurnal_birds"),
+    list(spring = "all_bats",          
+         fall = "bats")
+  )
+  
+  # mean frequency across scenario for a group/season
+  get_group_freq <- function(dir_path) {
+    files <- list.files(path = dir_path, 
+                        pattern = "^scenario_.*\\.rds$", 
+                        full.names = TRUE)
+    if (length(files) == 0) stop(sprintf("No scenarios found in %s", 
+                                         dir_path))
+    
+    sum_rast <- terra::unwrap(readRDS(files[1])$solution_raster)
+    if (length(files) > 1) {
+      for (i in 2:length(files)) {
+        sum_rast <- sum_rast + terra::unwrap(readRDS(files[i])$solution_raster)
+      }
+    }
+    return(sum_rast / length(files))
+  }
+  
+  # Define extent bounding box (-94.46 to -74.24 Lon, 40 to 48 Lat in EPSG 3978)
+  bbox_wgs84 <- sf::st_bbox(c(xmin = -94.46, 
+                              xmax = -74.24, 
+                              ymin = 40, ymax = 48), 
+                            crs = 4326)
+  bbox_proj  <- sf::st_transform(sf::st_as_sfc(bbox_wgs84), 
+                                 crs = 3978)
+  
+  # Esri background tiles
+  tiles <- maptiles::get_tiles(x = bbox_proj, 
+                               provider = "Esri.WorldGrayCanvas", 
+                               zoom = 8, 
+                               crop = TRUE)
+  b <- sf::st_bbox(tiles)
+  ext_template <- terra::ext(b["xmin"], 
+                             b["xmax"], 
+                             b["ymin"], 
+                             b["ymax"])
+  
+  # Template raster
+  sample_raw <- get_group_freq(file.path("prioritizrOutput", 
+                                         "Spring", 
+                                         "nocturnal_birds"))
+  template_rast <- terra::rast(ext_template, 
+                               resolution = terra::res(sample_raw), 
+                               crs = "EPSG:3978")
+  
+  spring_rasters <- list()
+  fall_rasters <- list()
+  
+  # Loop through, crop, and resample to template grid
+  for (g in guild_map) {
+    s_dir <- file.path("prioritizrOutput", 
+                       "Spring", 
+                       g$spring)
+    f_dir <- file.path("prioritizrOutput", 
+                       "Fall Migration", 
+                       g$fall)
+    
+    # Load and crop Spring
+    s_raw <- get_group_freq(s_dir)
+    s_raw[s_raw < 0.5] <- 0
+    s_raw[s_raw >= 0.5] <- 1
+    s_crop <- terra::crop(s_raw, ext_template)
+    s_resamp <- terra::resample(s_crop, 
+                                template_rast, 
+                                method = "near")
+    
+    # Load and crop Fall
+    f_raw <- get_group_freq(f_dir)
+    f_raw[f_raw < 0.5] <- 0
+    f_raw[f_raw >= 0.5] <- 1
+    f_crop <- terra::crop(f_raw, 
+                          ext_template)
+    f_resamp <- terra::resample(f_crop, 
+                                template_rast, 
+                                method = "near")
+    
+    spring_rasters[[g$spring]] <- s_resamp
+    fall_rasters[[g$fall]] <- f_resamp
+  }
+  
+  # Stack and sum across all groups within each season
+  spring_stack <- terra::rast(spring_rasters)
+  fall_stack   <- terra::rast(fall_rasters)
+  
+  spring_hotspot <- terra::app(spring_stack, 
+                               fun = "sum", 
+                               na.rm = TRUE)
+  fall_hotspot   <- terra::app(fall_stack, 
+                               fun = "sum", 
+                               na.rm = TRUE)
+  
+  # Fully combined master stack
+  master_stack <- c(spring_stack, 
+                    fall_stack)
+  master_hotspot <- terra::app(master_stack, 
+                               fun = "sum", 
+                               na.rm = TRUE)
+  
+  # Mask out zero-values so they become NAs
+  spring_hotspot[spring_hotspot <= 0] <- NA
+  fall_hotspot[fall_hotspot <= 0] <- NA
+  master_hotspot[master_hotspot <= 0] <- NA
+  
+  spring_hotspot <- terra::as.factor(spring_hotspot)
+  fall_hotspot <- terra::as.factor(fall_hotspot)
+  master_hotspot <- terra::as.factor(master_hotspot)
+  
+  # Save rasters 
+  out_dir <- file.path("prioritizrOutput", 
+                       "Synthesis")
+  if (!dir.exists(out_dir)) dir.create(out_dir, 
+                                       recursive = TRUE)
+  
+  terra::writeRaster(spring_hotspot, 
+                     file.path(out_dir, 
+                               "Spring_MultiGuild_Hotspots.tif"), 
+                     overwrite = TRUE)
+  terra::writeRaster(fall_hotspot, 
+                     file.path(out_dir, 
+                               "Fall_MultiGuild_Hotspots.tif"), 
+                     overwrite = TRUE)
+  terra::writeRaster(master_hotspot, 
+                     file.path(out_dir, 
+                               "Master_Invariant_Core_Refugia.tif"), 
+                     overwrite = TRUE)
+  
+#plotting spring, fall, and both combined
+  plot_hotspot <- function(rast_obj, 
+                           title_text, 
+                           filename_suffix) {
+    
+    p <- ggplot() +
+      tidyterra::geom_spatraster_rgb(data = tiles) +
+      tidyterra::geom_spatraster(data = rast_obj, 
+                                 na.rm = TRUE, 
+                                 alpha = 0.95) + 
+      scale_fill_viridis_d(
+        option = "inferno",
+        direction = -1,
+        name = "Overlapping\nGuilds",
+        na.value = "transparent",
+        na.translate = FALSE
+      ) +
+      theme_minimal() +
+      coord_sf(
+        crs = 3978,
+        xlim = c(b["xmin"], 
+                 b["xmax"]), 
+        ylim = c(b["ymin"], 
+                 b["ymax"]), 
+        expand = FALSE
+      ) +
+      labs(title = title_text)
+    
+    pdf_path <- file.path(out_dir, 
+                          paste0("Synthesis_", 
+                                 filename_suffix, 
+                                 ".pdf"))
+    ggsave(pdf_path, 
+           plot = p, 
+           width = 8, 
+           height = 6)
+    return(p)
+  }
+  
+  p_spring <- plot_hotspot(spring_hotspot, 
+                           "Spring", 
+                           "Spring_Hotspots")
+  p_fall   <- plot_hotspot(fall_hotspot, 
+                           "Fall", 
+                           "Fall_Hotspots")
+  p_master <- plot_hotspot(master_hotspot, 
+                           "Both Seasons", 
+                           "Master_Refugia")
+  
+  message("Discrete synthesis and plotting complete! Files saved to 'prioritizrOutput/Synthesis/'")
+  
+  return(list(
+    spring_raster = spring_hotspot, 
+    fall_raster = fall_hotspot, 
+    master_raster = master_hotspot,
+    spring_plot = p_spring,
+    fall_plot = p_fall,
+    master_plot = p_master
+  ))
+}
+
+hotspot_results <- synthesize_migration_hotspots()
+
