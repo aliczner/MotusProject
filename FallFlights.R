@@ -52,9 +52,8 @@ fall_flight_lines <- st_sf(fall_flight_steps,
 #===========================================================
 # creating a figure of search effort
 # ======================================================
-library(dplyr)
-library(tidyr)
-library(ggplot2)
+
+#plots of just effort
 
 fall_flight_lines %>%
   select(lon, lon_previous, lon_tagSite) %>%

@@ -45,7 +45,7 @@ Sys.setenv(TZ = "UTC")
 #| warning: false
 #| out-width: "100%"
 
-knitr::include_graphics("SpringLongitudeDistributions.png")
+knitr::include_graphics("spring_composite.png")
 
 ```
 
@@ -57,7 +57,7 @@ knitr::include_graphics("SpringLongitudeDistributions.png")
 #| warning: false
 #| out-width: "100%"
 
-knitr::include_graphics("FallLongitudeDistributions.png")
+knitr::include_graphics("fall_composite.png")
 
 ```
 

@@ -54,7 +54,132 @@ flight_lines <- st_sf(flight_steps,
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(patchwork)
+library(sf)
+library(terra)
+library(tidyterra)
 
+#defining the study are extent
+bbox_wgs84 <- sf::st_bbox(c(xmin = -92.7, 
+                            xmax = -72.9, 
+                            ymin = 37, 
+                            ymax = 49), 
+                          crs = 4326)
+
+# getting the ESRI basemap for plotting
+tiles <- maptiles::get_tiles(x = bbox_wgs84, 
+                             provider = "Esri.WorldGrayCanvas", 
+                             zoom = 8, 
+                             crop = TRUE)
+b <- sf::st_bbox(tiles)
+
+### making a bubble plot for detections
+
+spring_station_coords <- bind_rows(
+  flight_lines %>% 
+    st_drop_geometry() %>% 
+    select(lon, lat),
+  
+  flight_lines %>% 
+    st_drop_geometry() %>% 
+    select(lon = lon_previous, lat = lat_previous)
+) %>% 
+  filter(!is.na(lon) & !is.na(lat)) %>%
+  group_by(lon, lat) %>%
+  summarise(total_detections = n(), .groups = "drop") %>%
+  sf::st_as_sf(coords = c("lon", "lat"), crs = 4326) 
+
+# make the plot
+spring_bubble_map <- ggplot() +
+  tidyterra::geom_spatraster_rgb(data = tiles) +
+  geom_sf(data = spring_station_coords, 
+          aes(size = total_detections), 
+          color = "#0F0E0E", 
+          fill = "#5B1865", 
+          alpha = 0.6, 
+          shape = 21) +
+  scale_size_continuous(
+    range = c(1.2, 6), 
+    name = "Station detections"
+  ) +
+  coord_sf(
+    crs = 4326, 
+    xlim = c(b["xmin"], b["xmax"]), 
+    ylim = c(b["ymin"], b["ymax"]), 
+    expand = FALSE
+  ) +
+  labs(
+    title = "A",
+    x = "", 
+    y = ""
+  )+
+  theme_minimal() +
+  theme(
+    legend.position = "inside",
+    legend.position.inside = c(0.99,0.99),
+    legend.justification = c(1,1),
+    legend.direction = "horizontal",
+    legend.title.position = "top",
+    legend.background = element_rect(fill = alpha("white", 0.8), colour = NA),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 9)
+  )
+
+### tagging site effort plot
+
+#getting the coordinates
+spring_tagging_plot_df <- flight_lines %>%
+  st_drop_geometry() %>%
+  select(lon = lon_tagSite, lat = lat_tagSite) %>%
+  filter(!is.na(lon), !is.na(lat)) %>%
+  count(lon, lat, name = "num_tagged") %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
+  mutate(x = st_coordinates(.)[, 1]) %>%
+  st_drop_geometry()
+
+# making the effort plot
+
+spring_tagging_lon <- ggplot(spring_tagging_plot_df, 
+                           aes(x = x, 
+                               y = num_tagged)) +
+  geom_segment(aes(xend = x, y = 0, yend = num_tagged),
+               color = "black", linewidth = 2) +
+  theme_minimal() +
+  coord_cartesian(xlim = unname(c(b["xmin"], 
+                                  b["xmax"])), 
+                  expand = FALSE) +
+  labs(title = "B",
+       x = "longitude", 
+       y = "Individuals Tagged") +
+  theme(panel.grid.minor = element_blank())
+
+#putting both figures together
+xlims = c(b["xmin"], b["xmax"]) 
+ylims = c(b["ymin"], b["ymax"])
+asp_map <- diff(ylims) / (diff(xlims) * cos(mean(ylims) * pi / 180))
+asp_b   <- asp_map * 0.35   # plot B height relative to the map; change 0.35 to taste
+
+spring_tagging_lon <- spring_tagging_lon +
+  theme(aspect.ratio = asp_b)
+
+spring_composite_figure <- spring_bubble_map / spring_tagging_lon +
+  plot_layout(heights = c(asp_map, asp_b)) &
+  theme(plot.margin = margin(3, 5, 3, 5))
+
+# Save at a size that fits the map's shape
+w <- 9
+h <- (w - 1) * (asp_map + asp_b) + 1.2   # ~1" for the y-axis text, ~1.2" for titles and the x-axis
+ggsave("spring_composite.png", spring_composite_figure, 
+       width = w, 
+       height = h, 
+       dpi = 300)
+ggsave("spring_composite.pdf",
+       spring_composite_figure, 
+       width = w,
+       height = h, 
+       dpi = 300)
+
+# just search effort
 flight_lines %>%
   select(lon, lon_previous, lon_tagSite) %>%
   pivot_longer(
