@@ -1,5 +1,5 @@
 ---
-title: "Station Summary Data"
+title: "Motus project data analysis"
 author: "Amanda Liczner"
 output: 
   html_document:
@@ -36,8 +36,35 @@ Sys.setenv(TZ = "UTC")
 
 ```
 
-### Density of flights by longitude in spring
+## Project overview
 
+The purpose of this project is to identify conservation priority areas for migratory species in the Great Lakes Region
+
+We identified priority flight areas for migratory birds and bats. We separated the migratory birds by migration timing and season, and bats by season
+
+We separated birds into these categories as they would have different constraints by migration time and season which could result in spatially different priority areas
+
+The data used are all detections in the GLWS obtained from the web summary on motus.org
+
+These data are set up with each row being a detection pair - it shows the previous station and the current station. 
+
+To be included, there must have been at least one occurrence within the GLWS in the station pairs 
+
+All data below are for flights - detections between stations that occurred less than 12 hrs apart
+
+## Detections and effort
+
+### Number of detections and tagging locations by longitude - Spring
+
+Spring = Spring migration timing (March 1 to June 15)
+
+This plot gives an indication of sampling effort. It shows both where there are lots of detections and where the longitude of the tagging location. 
+Stations represented with bigger circles have more detections
+The bar chart below shows the number of individuals tagged at different longitudes
+
+I will be adding in latitude of tagging location, particularly to see where the tagging site is for fall
+
+Tagging effort lines up with detections
 
 ```{r}
 #| echo: false
@@ -49,8 +76,12 @@ knitr::include_graphics("spring_composite.png")
 
 ```
 
+### Number of detections and tagging locations by longitude - Fall
 
-### Density of flights by longitude in fall
+Fall = Fall migration (August 15 - November 15)
+
+Tagging effort also lines up with detections in fall
+
 ```{r}
 #| echo: false
 #| message: false
@@ -62,13 +93,18 @@ knitr::include_graphics("fall_composite.png")
 ```
 
 
-## Barplot of flight times by  migration timing categories for each species
+## Migration timing categories vs. flight times recorded
 
-Species were categorized by Winger et al 2019, Ralph 1981, Dufour et al 2026, Cornell BOW
+Species were categorized into migration time groups based on Winger et al 2019, Ralph 1981, Dufour et al 2026, Cornell BOW
 
-Flights are colour coded by the timing of the flight: daytime, mixed (day and night) or night flight
+Flights are colour coded by the timing of the flight: daytime, or night flight
 
-### diurnal spring species
+Day flights = any flight that started and ended between sunrise and sunset
+Night flights  = everything else. 
+
+NEXT STEPS: changing to show detection history by time rather than coarse categories of flight times. 
+
+### diurnal spring species (total detection = 267, 12 species)
 
 ```{r}
 #| echo: false
@@ -81,7 +117,7 @@ knitr::include_graphics("DiurnalFlightsBarplot.png")
 ```
 
 
-### mixed spring species 
+### mixed spring species (total detection = 1184, 10 species)
 
 ```{r}
 #| echo: false
@@ -93,7 +129,7 @@ knitr::include_graphics("MixedFlightsBarplot.png")
 
 ```
 
-### nocturnal spring species
+### nocturnal spring species (total detections = 2737, 39 species)
 
 ```{r}
 #| echo: false
@@ -105,7 +141,7 @@ knitr::include_graphics("NocturnalFlightsBarplot.png")
 
 ```
 
-### diurnal fall species
+### diurnal fall species (total detections = 738, 14 species)
 
 ```{r}
 #| echo: false
@@ -117,7 +153,7 @@ knitr::include_graphics("FallDiurnalFlightsBarplot.png")
 
 ```
 
-## mixed fall species
+### mixed fall species (total detections = 476, 11 species)
 
 ```{r}
 #| echo: false
@@ -129,7 +165,7 @@ knitr::include_graphics("FallMixedFlightsBarplot.png")
 
 ```
 
-## nocturnal fall species
+### nocturnal fall species (total detection = 2490, 43 species)
 
 ```{r}
 #| echo: false
@@ -141,7 +177,7 @@ knitr::include_graphics("FallNocturnalFlightsBarplot.png")
 
 ```
 
-## Migration timing of each species
+#### Migration timing of each species
 
 used Winger et al 2019, Ralph 1981, Dufour et al 2026, Cornell BOW
 
@@ -165,11 +201,20 @@ datatable(
 ```
 
 
-## Histogram of Departure/Landing
+## Histogram of Departure/Landing times
+
+These are spring flights of just birds at night. Only the first detection of a flight for an individual was included (i.e., if the flight had multiple steps, only the first step was included)
+
+We did this to try and determine time cut offs for take off and landing for nocturnal birds. 
+
+The histograms show number of first/last steps in the flight by hour from sunset/sunrise for departure and take off respectively  
 
 ### Departure flights for spring
 
-These are spring flights of just birds at night. Only the first detection of a flight for an individual was included (i.e., if the flight had multiple steps, only the first step was included)
+Based on these histograms:
+
+Take-off = 0.5 hour before sunset and 2 hours after sunset)
+Landing = 4 hours before sunrise and 0.5 hours after sunrise
 
 ```{r}
 #| echo: false
@@ -220,6 +265,35 @@ knitr::include_graphics("HistFallNightFlightEnd.png")
 ## Key Migration Areas
 
 ### prioritizr 
+
+prioritzr is an R package for systematic conservation prioritization. designed to "solve" different conservation problems using optimization algorithms - e.g., help decide which land parcels to purchase to get the most "bang for your buck" 
+
+https://prioritizr.net/
+
+For prioritizr you need:
+
+1. biodiversity data
+2. choose an objective (specific function) and targets/budget dependong on the objective
+3. cost
+
+For this project:
+1. is the flight data represented as a stacked  Multispecies Line Kernel Density Estimation
+
+#### example of Multispecies LKDE for all birds
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| out-width: "100%"
+
+knitr::include_graphics("BirdCooccurrenceLKDE.png")
+
+```
+
+2. The objective is a specific function in prioritizr. The one I selected aims to maximize biodiversity while minimizing cost. To maximize biodiversity you select a target that you get the algorithm to hit in the solution. Because the data is flight density, the target would be X amount of flight density of each species must be in the solution. 
+
+3. For this project the "cost" data is area so it tries to pick the solution with the least amount of area while meeting the objective
+
 
 I ran 9 different scenarios across these combinations
 - threshold the KDE rasters to the top: 75%, 50% and 30%
@@ -277,7 +351,7 @@ htmltools::tags$iframe(
 
 ```
 
-### This is the selection frequency for spring nocturnal takeoff (761 obs, 32 species)
+### This is the selection frequency for spring nocturnal takeoff 
 
 ```{r}
 #| echo: false
@@ -309,7 +383,7 @@ htmltools::tags$iframe(
 
 ```
 
-### This is the selection frequency for spring nocturnal landing (683 obs, 33 species)
+### This is the selection frequency for spring nocturnal landing 
 
 ```{r}
 #| echo: false
@@ -341,7 +415,7 @@ htmltools::tags$iframe(
 
 ```
 
-### The selection frequency for spring diurnal birds (267 obs, 13 species)
+### The selection frequency for spring diurnal birds 
 
 ```{r}
 #| echo: false
@@ -373,7 +447,7 @@ htmltools::tags$iframe(
 
 ```
 
-### The selection frequency for all spring bats (59 obs, 4 species)
+### The selection frequency for all spring bats
 
 ```{r}
 #| echo: false
@@ -407,7 +481,7 @@ htmltools::tags$iframe(
 
 ## Comparing Prioritizr output between seasons
 
-### within group comparisons
+## within group comparisons
 
 ### nocturnal birds
 
@@ -489,7 +563,9 @@ htmltools::tags$iframe(
 
 ```
 
-### within season comparisons
+## within season comparisons
+
+NEXT STEPS: remove take off and landing layers, rename guilds to layers or something else
 
 ### spring 
 
@@ -539,6 +615,11 @@ htmltools::tags$iframe(
 
 ```
 
+NEXT STEPS
+
+compare landcover between take off and landing
+
+
 This output (Irreplaceability Rank Importance) shows which pixels are the most important to keep for a given scenario (so this would have to be done per scenario or select among them). I picked this scenario because it is the biggest in terms of pixels so I assumed it coverd most cases. 
 In this scenario the threshold is the top 75% of the data and target of 50%
 
@@ -568,23 +649,6 @@ htmltools::tags$iframe(
   height = "600px",
   style = "border: none;"
 )
-
-```
-
-
-### Kernel density estimation on a raster grid for Bird spring flights
-
-A KDE was made for each Bird species, then they were stacked and summed
-not quite a line KDE method, but this preserves species and is less memory intensive
-
-2.5 km resolution, 5 km bandwidth (too memory intensive to go finer)
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-#| out-width: "100%"
-
-knitr::include_graphics("BirdCooccurrenceLKDE.png")
 
 ```
 
