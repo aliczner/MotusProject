@@ -416,7 +416,7 @@ htmltools::tags$iframe(
 
 ```
 
-### The selection frequency for spring diurnal birds 
+### The selection frequency for spring diurnal birds (Effort corrected)
 
 ```{r}
 #| echo: false
@@ -424,7 +424,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/Spring/day_birds/Selection_Frequency_Map_day_birds.pdf",
+  src = "prioritizrOutput/effortCorrected/Spring/day_birds/Selection_Frequency_Map_day_birds.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"

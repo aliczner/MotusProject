@@ -149,6 +149,12 @@ spring_land_prep <- prioritizrPrep_pipeline(
   percentiles = c(0.75, 0.50, 0.30)
 )
 
+spring_diurnal_prep <- prioritizrPrep_pipeline(
+  group_sf = day_birds.pj, 
+  group_name = "day_birds", 
+  season = "Spring",
+  percentiles = c(0.75, 0.50, 0.30)
+)
 
 #========================================================
 # prioritizr (Effort-Corrected)
@@ -277,6 +283,11 @@ spring_land_results <- prioritizr_pipeline(
   group_name = "nocturnal_land", 
   season = "Spring"
 )
+
+spring_day_results <- prioritizr_pipeline(
+  group_name = "day_birds", 
+  season = "Spring"
+)
 #================================================
 # evaluating prioritizr outputs (Effort-Corrected)
 #================================================
@@ -388,6 +399,9 @@ spring_eval_takeoff <- evaluate_scenarios(group_name = "nocturnal_takeoff",
 spring_eval_land <- evaluate_scenarios(group_name = "nocturnal_land", 
                                           season = "Spring")
 
+spring_eval_day <- evaluate_scenarios(group_name = "day_birds", 
+                                       season = "Spring")
+
 #=============================================================
 # plotting the prioritizr results (Effort-Corrected)
 #=============================================================
@@ -496,6 +510,7 @@ plot_group_scenario_maps <- function(group_name,
 plot_group_scenario_maps("nocturnal_birds", season = "Spring")
 plot_group_scenario_maps("nocturnal_takeoff", season = "Spring")
 plot_group_scenario_maps("nocturnal_land", season = "Spring")
+plot_group_scenario_maps("day_birds", season = "Spring")
 
 #=========================================================
 # Selection frequency plot (Effort-Corrected)
@@ -638,7 +653,8 @@ noc_takeoff_selection <- plot_selection_frequency("nocturnal_takeoff",
                                                 season = "Spring")
 noc_land_selection <- plot_selection_frequency("nocturnal_land", 
                                                   season = "Spring")
-
+day_selection <- plot_selection_frequency("day_birds", 
+                                               season = "Spring")
 
 testplot <- rast("prioritizrOutput/effortCorrected/Spring/nocturnal_birds/nocturnal_birds_top75.tif")
 mapview(testplot)
