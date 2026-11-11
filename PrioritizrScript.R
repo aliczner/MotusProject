@@ -61,118 +61,127 @@ names(cost_layer) <- "cost"
 # creating the group layers pre-prioritizr
 # ======================================================
 
-regionTemplate <- rast("LKDEBirdRasterStack.tif")[[1]]
-regionTemplate[!is.na(regionTemplate)] <- 0
+# Project flight lines to EPSG:3978
+flight_lines.pj <- st_transform(flight_lines, crs = 3978)
 
+# create a regional template from all the flights combined
+masterRegionTemplate <- rast(ext(flight_lines.pj), 
+                             resolution = 2500, 
+                             crs = st_crs(flight_lines.pj)$wkt)
+values(masterRegionTemplate) <- 0
+writeRaster(masterRegionTemplate, 
+            "masterRegionTemplate.tif", 
+            overwrite = TRUE)
+ 
 ### turning the data prep from above into a function for rerunning
 
-prioritizrPrep_pipeline <- function(group_sf, 
-                                    group_name, 
-                                    season = "Fall_Migration",   
-                                    percentiles = c(0.75, 0.50, 0.30)) {
+prioritizrPrep_pipeline_raw <- function(gpkg_path, 
+                                        group_name, 
+                                        season = "Spring", 
+                                        percentiles = c(0.75, 0.50, 0.30)) {
   
-  message(sprintf("Processing spatial layers for %s (%s)...", group_name, season))
+  message(sprintf("Processing per-species raw spatial layers for %s (%s)...", group_name, season))
   
-  # Create file path with the season folder nested in between
+  # Load  group
+  if (!file.exists(gpkg_path)) {
+    stop(sprintf("Could not find spatial file: '%s'.", gpkg_path))
+  }
+  group_sf <- st_read(gpkg_path, quiet = TRUE)
+  
   output_dir <- file.path("prioritizrOutput", season, group_name)
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
   
-  #  Build the 2.5 km region template internally from your group data
-  regionTemplate <- rast(ext(group_sf), 
-                         resolution = 2500, 
-                         crs = st_crs(group_sf)$wkt)
+  # 2Load template
+  master_template_path <- "masterRegionTemplate.tif"
+  if (!file.exists(master_template_path)) {
+    stop("Could not find 'masterRegionTemplate.tif'.")
+  }
+  regionTemplate <- rast(master_template_path)
   
-  # Get the species list 
   species_list <- unique(group_sf$species)
   
-  # Loop through species to create rasters and apply Gaussian smoothing (KDE)
-  species_rasters <- lapply(species_list, function(sp_name) {
+  # Cumulative Threshold Function (applied per species surface)
+  apply_cumulative_threshold <- function(r, top_pct) {
+    r_thresh <- r
+    vals <- values(r_thresh, mat = FALSE)
+    valid_idx <- which(!is.na(vals) & vals > 0)
     
-    df_sp <- group_sf %>% filter(species == sp_name)
-    
-    # Rasterize counts
-    flightsRast <- rasterize(vect(df_sp), 
-                             regionTemplate, 
-                             field = 1, 
-                             fun = "sum", 
-                             background = 0)
-    
-    # Gaussian smoothing kernel (5 km bandwidth)
-    weightMatrix <- focalMat(flightsRast, 
-                             d = 5000, 
-                             type = "Gauss") 
-    kdeSurface <- focal(flightsRast, 
-                        w = weightMatrix, 
-                        fun = sum, 
-                        na.rm = TRUE)
-    
-    return(kdeSurface)
-  })
-  
-  names(species_rasters) <- species_list
-  
-  # Stack species rasters
-  all_stack <- rast(species_rasters)
-  
-  # Thresholding function 
-  apply_threshold <- function(rast_stack, top_pct) {
-    thresh_stack <- rast_stack
-    for (i in 1:nlyr(thresh_stack)) {
-      r <- thresh_stack[[i]]
-      vals <- values(r, mat = FALSE)
-      vals_positive <- vals[vals > 0]
+    if (length(valid_idx) > 0) {
+      pos_vals <- vals[valid_idx]
+      sorted_order <- order(pos_vals, decreasing = TRUE)
+      sorted_vals <- pos_vals[sorted_order]
+      cum_sum <- cumsum(sorted_vals)
+      total_sum <- tail(cum_sum, 1)
       
-      if (length(vals_positive) > 0) {
-        cutoff <- quantile(vals_positive, 
-                           probs = (1 - top_pct), 
-                           names = FALSE, 
-                           na.rm = TRUE)
-        r[r < cutoff] <- 0
-        thresh_stack[[i]] <- r
-      }
-      rm(vals, vals_positive)
-      gc(verbose = FALSE)
+      cutoff_idx <- which(cum_sum >= (total_sum * top_pct))[1]
+      cutoff_val <- sorted_vals[cutoff_idx]
+      
+      r_thresh[r_thresh < cutoff_val] <- 0
     }
-    return(thresh_stack)
+    return(r_thresh)
   }
   
-  # Make and save thresholded stacks 
+  # Process each percentile tier independently
   results_list <- list()
+  
   for (pct in percentiles) {
     pct_label <- paste0("top", pct * 100)
-    thresh_stack <- apply_threshold(all_stack, pct)
+    
+    # Loop through each species, process, and threshold it individually
+    species_rasters_thresh <- lapply(species_list, function(sp_name) {
+      df_sp <- group_sf %>% filter(species == sp_name)
+      
+      # Rasterize individual species using flat count (field = 1)
+      flightsRast <- rasterize(vect(df_sp), 
+                               regionTemplate, 
+                               field = 1, 
+                               fun = "sum", 
+                               background = 0)
+      
+      # Gaussian smoothing (5 km bandwidth)
+      weightMatrix <- focalMat(flightsRast, d = 5000, type = "Gauss") 
+      kdeSurface <- focal(flightsRast, w = weightMatrix, fun = sum, na.rm = TRUE)
+      kdeSurface[is.na(kdeSurface) | is.infinite(kdeSurface)] <- 0
+      
+      # Apply cumulative threshold 
+      thresh_surface <- apply_cumulative_threshold(kdeSurface, pct)
+      return(thresh_surface)
+    })
+    
+    names(species_rasters_thresh) <- species_list
+    
+    # Stack thresholded species together for this percentile
+    thresh_stack <- rast(species_rasters_thresh)
     
     file_path <- file.path(output_dir, paste0(group_name, "_", pct_label, ".tif"))
-    
-    writeRaster(thresh_stack, 
-                file_path, 
-                overwrite = TRUE)
+    writeRaster(thresh_stack, file_path, overwrite = TRUE)
     
     results_list[[pct_label]] <- rast(file_path)
   }
   
-  # Create uniform cost layer from the first layer of stack
-  cost_layer <- all_stack[[1]]
+  # Create uniform cost layer from region template
+  cost_layer <- regionTemplate
   cost_layer[!is.na(cost_layer)] <- 1
   names(cost_layer) <- "cost"
   
   results_list[["cost_layer"]] <- cost_layer
-  results_list[["raw_stack"]] <- all_stack
   
-  message(sprintf("Finished processing and saved files for: %s (%s)!", group_name, season))
+  message(sprintf("Finished processing per-species raw stacks for: %s (%s)!", group_name, season))
   return(results_list)
 }
 
-
-
-### applying function to each group
+####################################33 
+#applying function to each group
 
 #all nocturnal birds
-nocturnal_results <- prioritizrPrep_pipeline(flight_noc_bird.pj, 
-                                            regionTemplate, 
-                                            group_name = "nocturnal_birds")
+spring_noc_raw <- prioritizrPrep_pipeline_raw(
+  gpkg_path = "flight_noc_bird_projected.gpkg", 
+  group_name = "nocturnal_birds", 
+  season = "Spring", 
+  percentiles = c(0.75, 0.50, 0.30)
+)
 
 #nocturnal birds takeoff
 flight_noc_takeoff.pj<- st_read("flight_noc_takeoff.pj.gpkg")
@@ -251,7 +260,7 @@ fall_bats_results <- prioritizrPrep_pipeline(
 # =======================================================
 
 prioritizr_pipeline <- function(group_name, 
-                                season = "Fall Migration", # Added season argument
+                                season = "Fall Migration", 
                                 thresholds = c(0.75, 0.50, 0.30),
                                 targets = c(0.17, 0.30, 0.50)) {
   
@@ -263,16 +272,16 @@ prioritizr_pipeline <- function(group_name,
     dir.create(output_dir, recursive = TRUE)
   }
   
-  # Load the pre-saved thresholded stacks from the season/group's nested directory
+  # Load the pre-saved corrected thresholded stacks from the nested directory
   stack_top75 <- rast(file.path(output_dir, 
                                 paste0(group_name, 
-                                       "_top75.tif")))
+                                       "_top75_corrected.tif")))
   stack_top50 <- rast(file.path(output_dir, 
                                 paste0(group_name, 
-                                       "_top50.tif")))
+                                       "_top50_corrected.tif")))
   stack_top30 <- rast(file.path(output_dir, 
                                 paste0(group_name, 
-                                       "_top30.tif")))
+                                       "_top30_corrected.tif")))
   
   # Create uniform cost layer from the loaded stack
   cost_layer <- stack_top75[[1]]
@@ -336,11 +345,11 @@ prioritizr_pipeline <- function(group_name,
                                               group_name, 
                                               "_id_", 
                                               i, 
-                                              ".rds"))
+                                              "_corrected.rds"))
     saveRDS(scenario_output_wrapped, 
             file = save_path)
     
-    message(sprintf("Completed & Saved Scenario %d of %d for [%s - %s] -> Thresh: %.2f | Target: %.2f", 
+    message(sprintf("Completed & Saved Corrected Scenario %d of %d for [%s - %s] -> Thresh: %.2f | Target: %.2f", 
                     i, 
                     nrow(scenarios), 
                     group_name, 
@@ -357,6 +366,13 @@ prioritizr_pipeline <- function(group_name,
 #nocturnal birds
 
 nocturnal_bird_results <- prioritizr_pipeline(group_name = "nocturnal_birds")
+
+# spring, nocturnal, bias corrected
+
+spring_noc_results <- prioritizr_pipeline(
+  group_name = "nocturnal_birds",
+  season = "Spring"
+)
 
 #nocturnal birds takeoff
 

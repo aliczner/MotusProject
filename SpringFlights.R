@@ -48,6 +48,11 @@ flight_lines <- st_sf(flight_steps,
                       geometry = st_sfc(geoms, 
                                         crs = 4326))
 
+flight_lines.pj <- st_transform(flight_lines, crs = 3978)
+
+# Save the master file so it lives permanently in your project directory
+st_write(flight_lines.pj, "flight_lines_projected.gpkg", delete_layer = TRUE)
+
 #===========================================================
 # creating a figure of search effort
 # ======================================================
@@ -320,6 +325,18 @@ plot_nocturnal <- flight_time_summary %>%
 # If the flight starts in the morning  its true starting sunset 
 # was actually on the previous calendar day (- 1 day).
 # Otherwise, it belongs to the sunset of the current calendar day.
+
+spring.noc.birds <- flight_lines %>%  
+  filter(MigrateTime == "nocturnal",
+         Animal == "Bird")
+
+spring_noc_bird.pj <- st_transform(spring.noc.birds, crs = 3978)
+
+# Save it
+st_write(spring_noc_bird.pj, 
+         "flight_noc_bird_projected.gpkg", 
+         delete_layer = TRUE)
+
 
 ### nocturnal take off
 noc.takeoff <- flight_lines %>%  
@@ -837,3 +854,24 @@ mapview(bats_cooccurrence_log,
         layer.name = "Core migratory areas")
 
 
+#==========================================================
+# creating effort corrected LKDE
+#==========================================================
+
+springNoc <- rast ("LKDEBirdNocRasterStack.tif")
+springTake <- rast( "LKDEBirdNocTakeoffRasterStack.tif")
+springLand <- rast("LKDEBirdNocLandRasterStack.tif")
+springDay <- rast( "LKDEBirdDayRasterStack.tif")
+springBat <- rast("LKDEBatsRasterStack.tif")
+
+biasRaster <- rast("biasRaster.tif")
+
+bias_aligned <- resample(biasRaster, 
+                         springNoc, 
+                         method = "bilinear")
+
+springNocCorrected <- springNoc/bias_aligned
+springTakeCorrected
+springLandCorrected
+springDayCorrected
+springBatCorrected 
