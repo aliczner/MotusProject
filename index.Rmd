@@ -360,7 +360,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/effortCorrectedSpring/nocturnal_takeoff/Selection_Frequency_Map_nocturnal_takeoff.pdf",
+  src = "prioritizrOutput/effortCorrected/Spring/nocturnal_takeoff/Selection_Frequency_Map_nocturnal_takeoff.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -384,7 +384,7 @@ htmltools::tags$iframe(
 
 ```
 
-### This is the selection frequency for spring nocturnal landing 
+### This is the selection frequency for spring nocturnal landing (Effort corrected)
 
 ```{r}
 #| echo: false
@@ -392,7 +392,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/Spring/nocturnal_land/Selection_Frequency_Map_nocturnal_land.pdf",
+  src = "prioritizrOutput/effortCorrected/Spring/nocturnal_land/Selection_Frequency_Map_nocturnal_land.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
