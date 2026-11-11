@@ -41,15 +41,17 @@ prioritizrPrep_pipeline <- function(group_sf,
   
   # Join effort
   group_sf_weighted <- group_sf %>%
-    left_join(station_effort_df %>% dplyr::select(stationID, active_days), by = "stationID") %>%
+    left_join(station_effort_df %>% dplyr::select(stationID, 
+                                                  active_days), by = "stationID") %>%
     mutate(
-      active_days = ifelse(is.na(active_days) | active_days < 1, 1, active_days),
+      active_days = ifelse(is.na(active_days) | active_days < 1, 1, 
+                           active_days),
       station_weight = 1 / log(active_days + 1)
     )
   
   species_list <- unique(group_sf_weighted$species)
   
-  #umulative Threshold Function (applied per species surface)
+  #cumulative Threshold Function (applied per species surface)
   apply_cumulative_threshold <- function(r, top_pct) {
     r_thresh <- r
     vals <- values(r_thresh, mat = FALSE)
@@ -102,8 +104,10 @@ prioritizrPrep_pipeline <- function(group_sf,
     # Stack thresholded species together for this percentile
     thresh_stack <- rast(species_rasters_thresh)
     
-    file_path <- file.path(output_dir, paste0(group_name, "_", pct_label, ".tif"))
-    writeRaster(thresh_stack, file_path, overwrite = TRUE)
+    file_path <- file.path(output_dir, 
+                           paste0(group_name, "_", pct_label, ".tif"))
+    writeRaster(thresh_stack, 
+                file_path, overwrite = TRUE)
     
     results_list[[pct_label]] <- rast(file_path)
   }
@@ -120,6 +124,8 @@ prioritizrPrep_pipeline <- function(group_sf,
 }
 
 ########################################################
+### running the above function
+
 # nocturnal spring birds
 spring_noc_prep <- prioritizrPrep_pipeline(
   group_sf = flight_noc_bird.pj, 
@@ -127,6 +133,15 @@ spring_noc_prep <- prioritizrPrep_pipeline(
   season = "Spring",
   percentiles = c(0.75, 0.50, 0.30)
 )
+
+# nocturnal takeoff birds
+spring_noc_prep <- prioritizrPrep_pipeline(
+  group_sf = flight_noc_takeoff.pj, 
+  group_name = "nocturnal_takeoff", 
+  season = "Spring",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
 
 #========================================================
 # prioritizr (Effort-Corrected)
@@ -246,6 +261,10 @@ spring_noc_results <- prioritizr_pipeline(
   season = "Spring"
 )
 
+spring_takeoff_results <- prioritizr_pipeline(
+  group_name = "nocturnal_takeoff", 
+  season = "Spring"
+)
 #================================================
 # evaluating prioritizr outputs (Effort-Corrected)
 #================================================
@@ -349,6 +368,9 @@ evaluate_scenarios <- function(group_name,
 
 #spring nocturnal birds
 spring_eval <- evaluate_scenarios(group_name = "nocturnal_birds", 
+                                  season = "Spring")
+
+spring_eval_takeoff <- evaluate_scenarios(group_name = "nocturnal_takeoff", 
                                   season = "Spring")
 
 #=============================================================
@@ -457,6 +479,7 @@ plot_group_scenario_maps <- function(group_name,
 
 #spring nocturnal birds
 plot_group_scenario_maps("nocturnal_birds", season = "Spring")
+plot_group_scenario_maps("nocturnal_takeoff", season = "Spring")
 
 #=========================================================
 # Selection frequency plot (Effort-Corrected)
@@ -594,6 +617,8 @@ plot_selection_frequency <- function(group_name,
 
 #spring nocturnal birds
 noc_birds_selection <- plot_selection_frequency("nocturnal_birds", 
+                                                season = "Spring")
+noc_takeoff_selection <- plot_selection_frequency("nocturnal_takeoff", 
                                                 season = "Spring")
 
 testplot <- rast("prioritizrOutput/effortCorrected/Spring/nocturnal_birds/nocturnal_birds_top75.tif")

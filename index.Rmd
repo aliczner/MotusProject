@@ -318,7 +318,7 @@ htmltools::tags$iframe(
 
 ```
 
-### This is the selection frequency map for all nocturnal spring birds
+### This is the selection frequency map (effort corrected) for all nocturnal spring birds
 
 ```{r}
 #| echo: false
@@ -326,13 +326,14 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/Spring/nocturnal_birds/Selection_Frequency_Map_nocturnal_birds.pdf",
+  src = "prioritizrOutput/effortCorrected/Spring/nocturnal_birds/Selection_Frequency_Map_nocturnal_birds.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
 )
 
 ```
+
 
 ### Fall all nocturnal birds selection frequency map
 
@@ -351,7 +352,7 @@ htmltools::tags$iframe(
 
 ```
 
-### This is the selection frequency for spring nocturnal takeoff 
+### This is the selection frequency for spring nocturnal takeoff (effort corrected)
 
 ```{r}
 #| echo: false
@@ -359,7 +360,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/Spring/nocturnal_takeoff/Selection_Frequency_Map_nocturnal_takeoff.pdf",
+  src = "prioritizrOutput/effortCorrectedSpring/nocturnal_takeoff/Selection_Frequency_Map_nocturnal_takeoff.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
