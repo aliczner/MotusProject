@@ -335,7 +335,7 @@ htmltools::tags$iframe(
 ```
 
 
-### Fall all nocturnal birds selection frequency map
+### Fall all nocturnal birds selection frequency map (effort corrected)
 
 
 ```{r}
@@ -344,7 +344,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/Fall Migration/nocturnal_birds/Selection_Frequency_Map_nocturnal_birds.pdf",
+  src = "prioritizrOutput/effortCorrected/Fall/nocturnal_birds/Selection_Frequency_Map_nocturnal_birds.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -368,7 +368,7 @@ htmltools::tags$iframe(
 
 ```
 
-### selection frequency for fall nocturnal takeoff
+### selection frequency for fall nocturnal takeoff (effort corrected)
 
 ```{r}
 #| echo: false
@@ -376,7 +376,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/Fall Migration/takeoff_birds/Selection_Frequency_Map_takeoff_birds.pdf",
+  src = "prioritizrOutput/effortCorrected/Fall/nocturnal_takeoff/Selection_Frequency_Map_nocturnal_takeoff.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -448,7 +448,7 @@ htmltools::tags$iframe(
 
 ```
 
-### The selection frequency for all spring bats
+### The selection frequency for all spring bats (effort corrected)
 
 ```{r}
 #| echo: false
@@ -456,7 +456,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/Spring/all_bats/Selection_Frequency_Map_all_bats.pdf",
+  src = "prioritizrOutput/effortCorrected/Spring/bats/Selection_Frequency_Map_bats.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"

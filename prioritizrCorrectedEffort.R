@@ -126,6 +126,8 @@ prioritizrPrep_pipeline <- function(group_sf,
 ########################################################
 ### running the above function
 
+### spring
+
 # nocturnal spring birds
 spring_noc_prep <- prioritizrPrep_pipeline(
   group_sf = flight_noc_bird.pj, 
@@ -153,6 +155,32 @@ spring_diurnal_prep <- prioritizrPrep_pipeline(
   group_sf = day_birds.pj, 
   group_name = "day_birds", 
   season = "Spring",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+spring_bat_prep <- prioritizrPrep_pipeline(
+  group_sf = all_bats.pj, 
+  group_name = "bats", 
+  season = "Spring",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+### fall 
+fall_noc_bird <- st_read("fall_all_Bird_nocturnal.gpkg")
+
+fall_noc_prep <- prioritizrPrep_pipeline(
+  group_sf = fall_noc_bird, 
+  group_name = "nocturnal_birds", 
+  season = "Fall",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+fall_takeoff_bird <- st_read("flight_noc_takeoff.pj.gpkg")
+
+fall_takeoff_prep <- prioritizrPrep_pipeline(
+  group_sf = fall_takeoff_bird, 
+  group_name = "nocturnal_takeoff", 
+  season = "Fall",
   percentiles = c(0.75, 0.50, 0.30)
 )
 
@@ -288,6 +316,22 @@ spring_day_results <- prioritizr_pipeline(
   group_name = "day_birds", 
   season = "Spring"
 )
+
+spring_day_results <- prioritizr_pipeline(
+  group_name = "bats", 
+  season = "Spring"
+)
+
+### fall
+fall_noc_results <- prioritizr_pipeline(
+  group_name = "nocturnal_birds", 
+  season = "Fall"
+)
+
+fall_takeoff_results <- prioritizr_pipeline(
+  group_name = "nocturnal_takeoff", 
+  season = "Fall"
+)
 #================================================
 # evaluating prioritizr outputs (Effort-Corrected)
 #================================================
@@ -402,6 +446,19 @@ spring_eval_land <- evaluate_scenarios(group_name = "nocturnal_land",
 spring_eval_day <- evaluate_scenarios(group_name = "day_birds", 
                                        season = "Spring")
 
+spring_eval_bat <- evaluate_scenarios(group_name = "bats", 
+                                      season = "Spring")
+
+### fall
+
+#fall nocturnal birds
+fall_eval <- evaluate_scenarios(group_name = "nocturnal_birds", 
+                                  season = "Fall")
+
+fall_eval_takeoff <- evaluate_scenarios(group_name = "nocturnal_takeoff", 
+                                  season = "Fall")
+
+
 #=============================================================
 # plotting the prioritizr results (Effort-Corrected)
 #=============================================================
@@ -506,11 +563,16 @@ plot_group_scenario_maps <- function(group_name,
 
 ## spring
 
-#spring nocturnal birds
 plot_group_scenario_maps("nocturnal_birds", season = "Spring")
 plot_group_scenario_maps("nocturnal_takeoff", season = "Spring")
 plot_group_scenario_maps("nocturnal_land", season = "Spring")
 plot_group_scenario_maps("day_birds", season = "Spring")
+plot_group_scenario_maps("bats", season = "Spring")
+
+##  Fall
+plot_group_scenario_maps("nocturnal_birds", season = "Fall")
+plot_group_scenario_maps("nocturnal_takeoff", season = "Fall")
+
 
 #=========================================================
 # Selection frequency plot (Effort-Corrected)
@@ -646,7 +708,6 @@ plot_selection_frequency <- function(group_name,
 
 ##  spring
 
-#spring nocturnal birds
 noc_birds_selection <- plot_selection_frequency("nocturnal_birds", 
                                                 season = "Spring")
 noc_takeoff_selection <- plot_selection_frequency("nocturnal_takeoff", 
@@ -655,6 +716,15 @@ noc_land_selection <- plot_selection_frequency("nocturnal_land",
                                                   season = "Spring")
 day_selection <- plot_selection_frequency("day_birds", 
                                                season = "Spring")
+bat_selection <- plot_selection_frequency("bats", 
+                                          season = "Spring")
+
+##  fall
+noc_birds_selection <- plot_selection_frequency("nocturnal_birds", 
+                                                season = "Fall")
+
+noc_takeoff_selection <- plot_selection_frequency("nocturnal_takeoff", 
+                                                season = "Fall")
 
 testplot <- rast("prioritizrOutput/effortCorrected/Spring/nocturnal_birds/nocturnal_birds_top75.tif")
 mapview(testplot)
