@@ -213,6 +213,15 @@ fall_day_prep <- prioritizrPrep_pipeline(
   percentiles = c(0.75, 0.50, 0.30)
 )
 
+fall_bats <- st_read("fall_bat_Bat_unclassified.gpkg")
+
+fall_bats_prep <- prioritizrPrep_pipeline(
+  group_sf = fall_bats, 
+  group_name = "bats", 
+  season = "Fall",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
 
 #========================================================
 # prioritizr (Effort-Corrected)
@@ -373,6 +382,11 @@ fall_day_results <- prioritizr_pipeline(
   season = "Fall"
 )
 
+fall_bat_results <- prioritizr_pipeline(
+  group_name = "bats", 
+  season = "Fall"
+)
+
 #================================================
 # evaluating prioritizr outputs (Effort-Corrected)
 #================================================
@@ -505,6 +519,9 @@ fall_eval_land <- evaluate_scenarios(group_name = "nocturnal_land",
 fall_eval_day <- evaluate_scenarios(group_name = "day_birds", 
                                         season = "Fall")
 
+fall_eval_bats <- evaluate_scenarios(group_name = "bats", 
+                                    season = "Fall")
+
 #=============================================================
 # plotting the prioritizr results (Effort-Corrected)
 #=============================================================
@@ -620,6 +637,7 @@ plot_group_scenario_maps("nocturnal_birds", season = "Fall")
 plot_group_scenario_maps("nocturnal_takeoff", season = "Fall")
 plot_group_scenario_maps("nocturnal_land", season = "Fall")
 plot_group_scenario_maps("day_birds", season = "Fall")
+plot_group_scenario_maps("bats", season = "Fall")
 
 
 #=========================================================
@@ -780,6 +798,8 @@ noc_land_selection <- plot_selection_frequency("nocturnal_land",
 day_birds_selection <- plot_selection_frequency("day_birds", 
                                                season = "Fall")
 
+fall_bats_selection <- plot_selection_frequency("bats", 
+                                                season = "Fall")
 
 testplot <- rast("prioritizrOutput/effortCorrected/Spring/nocturnal_birds/nocturnal_birds_top75.tif")
 mapview(testplot)

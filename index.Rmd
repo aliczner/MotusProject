@@ -455,7 +455,7 @@ htmltools::tags$iframe(
 
 ```
 
-### The selection frequency for fall bats
+### The selection frequency for fall bats (effort corrected)
 
 ```{r}
 #| echo: false
@@ -463,7 +463,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/Fall Migration/bats/Selection_Frequency_Map_bats.pdf",
+  src = "prioritizrOutput/effortCorrected/Fall/bats/Selection_Frequency_Map_bats.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
