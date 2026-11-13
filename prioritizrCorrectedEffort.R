@@ -10,7 +10,9 @@ library(sf)
 prioritizrPrep_pipeline <- function(group_sf, 
                                     group_name, 
                                     season = "Spring", 
-                                    percentiles = c(0.75, 0.50, 0.30)) {
+                                    percentiles = c(0.75, 
+                                                    0.50, 
+                                                    0.30)) {
   
   message(sprintf("Processing per-species upstream-weighted layers for %s (%s)...", 
                   group_name, 
@@ -24,14 +26,14 @@ prioritizrPrep_pipeline <- function(group_sf,
     dir.create(output_dir, recursive = TRUE)
   }
   
-  #  Load  template
+  # Load template
   master_template_path <- "masterRegionTemplate.tif"
   if (!file.exists(master_template_path)) {
     stop("Could not find 'masterRegionTemplate.tif'. Run your template creation script first.")
   }
   regionTemplate <- rast(master_template_path)
   
-  # Load station effort file
+  # Load year-specific station effort file
   effort_rds <- ifelse(grepl("Spring", season, ignore.case = TRUE), 
                        "SpringDepsDuration.rds", 
                        "FallDepsDuration.rds")
@@ -40,19 +42,24 @@ prioritizrPrep_pipeline <- function(group_sf,
   }
   station_effort_df <- readRDS(effort_rds)
   
-  # Join effort
+  # Extract detection arrival year and join on stationID + year
   group_sf_weighted <- group_sf %>%
-    left_join(station_effort_df %>% dplyr::select(stationID, 
-                                                  active_days), by = "stationID") %>%
     mutate(
-      active_days = ifelse(is.na(active_days) | active_days < 1, 1, 
-                           active_days),
+      arrival_dt = as.POSIXct(tsEnd_dt),
+      year = lubridate::year(arrival_dt)
+    ) %>%
+    left_join(
+      station_effort_df %>% dplyr::select(stationID, year, active_days), 
+      by = c("stationID", "year")
+    ) %>%
+    mutate(
+      active_days = ifelse(is.na(active_days) | active_days < 1, 1, active_days),
       station_weight = 1 / log(active_days + 1)
     )
   
   species_list <- unique(group_sf_weighted$species)
   
-  #cumulative Threshold Function (applied per species surface)
+  # Cumulative Threshold Function (applied per species surface)
   apply_cumulative_threshold <- function(r, top_pct) {
     r_thresh <- r
     vals <- values(r_thresh, mat = FALSE)
@@ -73,14 +80,15 @@ prioritizrPrep_pipeline <- function(group_sf,
     return(r_thresh)
   }
   
-  #Process each percentile tier independently
+  # Process each percentile tier independently
   results_list <- list()
   
   for (pct in percentiles) {
     pct_label <- paste0("top", pct * 100)
     
     # Loop through each species, process, and threshold it individually
-    species_rasters_thresh <- lapply(species_list, function(sp_name) {
+    species_rasters_thresh <- lapply(species_list, 
+                                     function(sp_name) {
       df_sp <- group_sf_weighted %>% filter(species == sp_name)
       
       # Rasterize individual species
@@ -91,7 +99,8 @@ prioritizrPrep_pipeline <- function(group_sf,
                                background = 0)
       
       # Gaussian smoothing (5 km bandwidth)
-      weightMatrix <- focalMat(flightsRast, d = 5000, type = "Gauss") 
+      weightMatrix <- focalMat(flightsRast,
+                               d = 5000, type = "Gauss") 
       kdeSurface <- focal(flightsRast, w = weightMatrix, fun = sum, na.rm = TRUE)
       kdeSurface[is.na(kdeSurface) | is.infinite(kdeSurface)] <- 0
       
@@ -106,7 +115,8 @@ prioritizrPrep_pipeline <- function(group_sf,
     thresh_stack <- rast(species_rasters_thresh)
     
     file_path <- file.path(output_dir, 
-                           paste0(group_name, "_", pct_label, ".tif"))
+                           paste0(group_name, "_", 
+                                  pct_label, ".tif"))
     writeRaster(thresh_stack, 
                 file_path, overwrite = TRUE)
     
@@ -193,6 +203,16 @@ fall_takeoff_prep <- prioritizrPrep_pipeline(
   season = "Fall",
   percentiles = c(0.75, 0.50, 0.30)
 )
+
+fall_day_bird <- st_read("fall_all_Bird_diurnal.gpkg")
+
+fall_day_prep <- prioritizrPrep_pipeline(
+  group_sf = fall_land_bird, 
+  group_name = "day_birds", 
+  season = "Fall",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
 
 #========================================================
 # prioritizr (Effort-Corrected)
@@ -348,6 +368,11 @@ fall_takeoff_results <- prioritizr_pipeline(
   season = "Fall"
 )
 
+fall_day_results <- prioritizr_pipeline(
+  group_name = "day_birds", 
+  season = "Fall"
+)
+
 #================================================
 # evaluating prioritizr outputs (Effort-Corrected)
 #================================================
@@ -474,7 +499,10 @@ fall_eval <- evaluate_scenarios(group_name = "nocturnal_birds",
 fall_eval_takeoff <- evaluate_scenarios(group_name = "nocturnal_takeoff", 
                                   season = "Fall")
 
-fall_eval_takeoff <- evaluate_scenarios(group_name = "nocturnal_land", 
+fall_eval_land <- evaluate_scenarios(group_name = "nocturnal_land", 
+                                        season = "Fall")
+
+fall_eval_day <- evaluate_scenarios(group_name = "day_birds", 
                                         season = "Fall")
 
 #=============================================================
@@ -591,6 +619,7 @@ plot_group_scenario_maps("bats", season = "Spring")
 plot_group_scenario_maps("nocturnal_birds", season = "Fall")
 plot_group_scenario_maps("nocturnal_takeoff", season = "Fall")
 plot_group_scenario_maps("nocturnal_land", season = "Fall")
+plot_group_scenario_maps("day_birds", season = "Fall")
 
 
 #=========================================================
@@ -747,6 +776,10 @@ noc_takeoff_selection <- plot_selection_frequency("nocturnal_takeoff",
 
 noc_land_selection <- plot_selection_frequency("nocturnal_land", 
                                                   season = "Fall")
+
+day_birds_selection <- plot_selection_frequency("day_birds", 
+                                               season = "Fall")
+
 
 testplot <- rast("prioritizrOutput/effortCorrected/Spring/nocturnal_birds/nocturnal_birds_top75.tif")
 mapview(testplot)
