@@ -400,7 +400,7 @@ htmltools::tags$iframe(
 
 ```
 
-### Selection frequency for fall nocturnal landing
+### Selection frequency for fall nocturnal landing (effort corrected)
 
 ```{r}
 #| echo: false
@@ -408,7 +408,7 @@ htmltools::tags$iframe(
 #| warning: false
 
 htmltools::tags$iframe(
-  src = "prioritizrOutput/Fall Migration/land_birds/Selection_Frequency_Map_land_birds.pdf",
+  src = "prioritizrOutput/effortCorrected/Fall/nocturnal_land/Selection_Frequency_Map_nocturnal_land.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
