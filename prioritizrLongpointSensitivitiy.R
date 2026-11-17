@@ -741,3 +741,122 @@ day_eval <- evaluate_scenarios(group_name = "day_birds",
 #Fall bats
 bat_eval <- evaluate_scenarios(group_name = "bats", 
                                season = "Fall Migration")
+
+#=============================================================
+# plotting the prioritizr results
+#=============================================================
+
+library(terra)
+library(sf)
+library(maptiles)
+library(ggplot2)
+library(tidyterra)
+
+plot_group_scenario_maps <- function(group_name, 
+                                     season = "Spring",
+                                     total_scenarios = 9) {
+  
+  # Updated output path to include 'effortCorrected'
+  output_dir <- file.path("prioritizrOutput", 
+                          "noLongpoint",
+                          season,
+                          group_name)
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+    message(sprintf("Created nested directory: '%s'", output_dir))
+  }
+  
+  # Set up the mapping extent and reproject
+  smaller_extent <- st_as_sfc(st_bbox(
+    c(xmin = -94.46, 
+      xmax = -74.24, 
+      ymin = 40, 
+      ymax = 48), 
+    crs = 4326
+  ))
+  
+  smaller_extent.pj <- st_transform(smaller_extent, crs = 3978)
+  
+  # Get basemap tiles once for the region
+  tiles <- get_tiles(
+    x = smaller_extent.pj, 
+    provider = "CartoDB.PositronNoLabels", 
+    zoom = 8, 
+    crop = TRUE
+  )
+  
+  b <- st_bbox(tiles)
+  
+  # Loop through scenarios
+  for (i in 1:total_scenarios) {
+    
+    file_path <- file.path(output_dir, 
+                           paste0("scenario_", 
+                                  group_name, 
+                                  "_id_", 
+                                  i, 
+                                  ".rds"))
+    
+    if (!file.exists(file_path)) {
+      next # Skip if the file doesn't exist in that folder
+    }
+    
+    message(sprintf("Processing map for Scenario ID %d [%s - %s]...", i, group_name, season))
+    
+    # Load and unwrap data
+    data <- readRDS(file_path)
+    rast <- terra::unwrap(data$solution_raster)
+    
+    # Extract metadata for labeling
+    scenario_name <- if (!is.null(data$name)) data$name else paste0(group_name, "_id_", i)
+    threshold <- data$threshold
+    target <- data$target
+    penalty <- ifelse(is.null(data$penalty), 0, data$penalty)
+    
+    # Crop raster to match map tiles extent
+    rast_cropped <- terra::crop(rast, 
+                                ext(b["xmin"], b["xmax"], b["ymin"], b["ymax"]))
+    
+    # Generate ggplot
+    p <- ggplot() +
+      geom_spatraster_rgb(data = tiles, maxcell = 500000) +
+      geom_spatraster(data = as.factor(rast_cropped), maxcell = 500000) + 
+      scale_fill_manual(values = c("0" = "#ffffff00", "1" = "#2E933C")) +
+      labs(
+        title = paste("Scenario:", scenario_name),
+        subtitle = paste("Season:", season, "| Threshold:", threshold, "| Target:", target)
+      ) +
+      theme_minimal() +
+      coord_sf(
+        xlim = c(b["xmin"], b["xmax"]), 
+        ylim = c(b["ymin"], b["ymax"]), 
+        expand = FALSE
+      )
+    
+    # Save PDF directly into the nested group folder
+    pdf_filename <- file.path(output_dir, paste0("Map_scenario_id_", i, ".pdf"))
+    ggsave(pdf_filename, plot = p, width = 8, height = 6)
+  }
+  
+  message(sprintf("All maps for [%s - %s] successfully saved to '%s/'", group_name, season, output_dir))
+}
+
+############################
+#running the plotting function
+
+## spring
+
+plot_group_scenario_maps("nocturnal_birds", season = "Spring Migration")
+plot_group_scenario_maps("nocturnal_takeoff", season = "Spring Migration")
+plot_group_scenario_maps("nocturnal_land", season = "Spring Migration")
+plot_group_scenario_maps("day_birds", season = "Spring Migration")
+plot_group_scenario_maps("bats", season = "Spring Migration")
+
+##  Fall
+plot_group_scenario_maps("nocturnal_birds", season = "Fall Migration")
+plot_group_scenario_maps("nocturnal_takeoff", season = "Fall Migration")
+plot_group_scenario_maps("nocturnal_land", season = "Fall Migration")
+plot_group_scenario_maps("day_birds", season = "Fall Migration")
+plot_group_scenario_maps("bats", season = "Fall Migration")
+
+
