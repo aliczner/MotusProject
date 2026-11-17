@@ -54,10 +54,12 @@ DepsDuration <- df.recvDeps %>%
   )
 
 ### function to separate effort by migration season
-get_seasonal_station_effort <- function(df.recvDeps, season = "Spring") {
+library(dplyr)
+library(lubridate)
+
+get_seasonal_station_effort_by_year <- function(df.recvDeps, season = "Spring") {
   
   df.recvDeps %>%
-    # Filter out rows with missing timestamps to prevent NA errors in year()
     filter(!is.na(timeStart) & !is.na(timeEnd)) %>%
     rowwise() %>%
     do({
@@ -71,7 +73,7 @@ get_seasonal_station_effort <- function(df.recvDeps, season = "Spring") {
       season_records <- list()
       for (yr in start_yr:end_yr) {
         
-        # Define the seasonal window for this year
+        # Define exact seasonal operating windows
         if (season %in% c("Spring", "Spring_Migration")) {
           win_start <- ymd_hms(paste0(yr, "-03-01 00:00:00"))
           win_end   <- ymd_hms(paste0(yr, "-06-16 23:59:59"))
@@ -82,12 +84,14 @@ get_seasonal_station_effort <- function(df.recvDeps, season = "Spring") {
           stop("Specify 'Spring' or 'Fall'")
         }
         
-        # Calculate overlap between deployment and the seasonal window
+        # Calculate overlap between deployment and the seasonal window for THIS year
         overlap_start <- max(start_dt, win_start)
         overlap_end   <- min(end_dt, win_end)
         
         if (overlap_start < overlap_end) {
-          days_active <- as.numeric(difftime(overlap_end, overlap_start, units = "days"))
+          days_active <- as.numeric(difftime(overlap_end, 
+                                             overlap_start, 
+                                             units = "days"))
           
           season_records[[length(season_records) + 1]] <- data.frame(
             stationID = row$stationID,
@@ -107,111 +111,59 @@ get_seasonal_station_effort <- function(df.recvDeps, season = "Spring") {
       }
     }) %>%
     ungroup() %>%
-    # Aggregate total active days across all years into a single row per station
-    group_by(stationID, name, latitude, longitude) %>%
+    # GROUP BY STATION AND YEAR (Preserves year-specific seasonal effort!)
+    group_by(stationID, name, latitude, longitude, year) %>%
     summarise(active_days = sum(active_days_season), .groups = "drop")
 }
 
 
-# Generate Spring effort 
-spring_effort_stations <- get_seasonal_station_effort(DepsDuration, season = "Spring")
+# Generate Spring effort table (by station and year)
+spring_effort_by_year <- get_seasonal_station_effort_by_year(DepsDuration, 
+                                                             season = "Spring")
 
-# Generate Fall effort 
-fall_effort_stations <- get_seasonal_station_effort(DepsDuration, season = "Fall")
+# Generate Fall effort table (by station and year)
+fall_effort_by_year <- get_seasonal_station_effort_by_year(DepsDuration, 
+                                                           season = "Fall")
 
-saveRDS(spring_effort_stations,"SpringDepsDuration.rds")
-saveRDS(fall_effort_stations,"FallDepsDuration.rds")
+# Save
+saveRDS(spring_effort_by_year, "SpringDepsDuration.rds")
+saveRDS(fall_effort_by_year, "FallDepsDuration.rds")
 
-#==================================================
-# creating spatial bias file with kernel denisty
-#=================================================
+#add active days to the detections
+# Join using the current station and the arrival year
+spring_effort_lookup <- readRDS("SpringDepsDuration.rds") %>% 
+  rename(active_days_spring = active_days) %>%
+  select(stationID, year, active_days_spring)
 
-library(sf)
-library(dplyr)
-library(terra)
+fall_effort_lookup <- readRDS("FallDepsDuration.rds") %>% 
+  rename(active_days_fall = active_days) %>%
+  select(stationID, year, active_days_fall)
 
-spring_effort_sf <- spring_effort_stations %>%
-  filter(!is.na(longitude) & !is.na(latitude)) %>%
-  st_as_sf(
-    coords = c("longitude", "latitude"), 
-    crs = 4326
+# Join t based on the record's season
+flight_lines_weighted <- flight_lines.pj %>%
+  mutate(
+    arrival_dt = as.POSIXct(tsEnd_dt),
+    year = lubridate::year(arrival_dt)
   ) %>%
-  st_transform(crs = 3978) # reproject to Statistics Canada Lambert
-
-fall_effort_sf <- fall_effort_stations %>%
-  filter(!is.na(longitude) & !is.na(latitude)) %>%
-  st_as_sf(
-    coords = c("longitude", "latitude"), 
-    crs = 4326
+  # Join Spring effort
+  left_join(spring_effort_lookup, by = c("stationID", "year")) %>%
+  # Join Fall effort
+  left_join(fall_effort_lookup, by = c("stationID", "year")) %>%
+  mutate(
+    # Select the correct active days pool depending on the row's season
+    active_days = case_when(
+      grepl("Spring", season, ignore.case = TRUE) ~ active_days_spring,
+      grepl("Fall", season, ignore.case = TRUE) ~ active_days_fall,
+      TRUE ~ NA_real_
+    ),
+    # Fallback safety and final weight calculation
+    active_days = tidyr::replace_na(active_days, 1),
+    station_weight = 1 / log(active_days + 1)
   ) %>%
-  st_transform(crs = 3978)
-
-#use the bird LDKE to make sure its the same resolution and extent
-template_raster <- rast("LKDEBirdRasterStack.tif") 
-
-# convert station data to terra vector object
-spring_stations_vect <- vect(spring_effort_sf)
-fall_stations_vect <- vect(fall_effort_sf)
-
-# Extract coordinates and weights
-spring_coords <- crds(spring_stations_vect)
-spring_weights <- spring_stations_vect$total_active_days
-
-fall_coords <- crds(fall_stations_vect)
-fall_weights <- fall_stations_vect$total_active_days
-
-# Generate the weighted Kernel Density Estimation
-# Using terra's spatial smoothing 
-
-springbias_raster <- rasterize(spring_stations_vect, 
-                         template_raster, 
-                         field = "active_days", 
-                         fun = sum, 
-                         background = 0)
-
-# Apply a Gaussian smoothing
-springEffortWeightMatrix <- focalMat(
-  springbias_raster, 
-  d = 20000, 
-  type = "Gauss"
-) 
-
-springbiasSurface <- focal(
-  springbias_raster, 
-  w = springEffortWeightMatrix, 
-  fun = sum, 
-  na.rm = TRUE
-)
-
-springbiasSurface[springbiasSurface < 0.1] <- 1.0
-
-writeRaster(springbiasSurface, "springbiasRaster.tif",
-            overwrite = TRUE)
-
-# fall migration
-fallbias_raster <- rasterize(fall_stations_vect, 
-                         template_raster, 
-                         field = "active_days", 
-                         fun = sum, 
-                         background = 0)
-
-# Apply a Gaussian smoothing
-fallEffortWeightMatrix <- focalMat(
-  fallbias_raster, 
-  d = 20000, 
-  type = "Gauss"
-) 
-
-fallbiasSurface <- focal(
-  fallbias_raster, 
-  w = fallEffortWeightMatrix, 
-  fun = sum, 
-  na.rm = TRUE
-)
+  # Clean up intermediate columns
+  select(-active_days_spring, -active_days_fall)
 
 
-writeRaster(fallbiasSurface, "fallbiasRaster.tif",
-            overwrite = TRUE)
 
 #######################################################3
 

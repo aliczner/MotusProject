@@ -1,0 +1,347 @@
+## Rerunning the prioritizr analysis with sensitivity testing
+## by removing any individuals tagged at longpoint
+
+#=================================================
+# identifying the longpoint birds
+#=================================================
+library(dplyr)
+library (sf)
+library(lubridate)
+
+#creating a dataframe containing the lat/lon for the towers at longpoint
+lp_towers <- data.frame(
+    lon = c(-80.3966, -80.3966, -80.3981, -80.2844, -80.3987, -80.3983,
+            -80.3852, -80.0559),
+    lat = c(42.5832, 42.5833, 42.5828, 42.5611, 42.5828, 42.5829, 42.5798, 
+            42.5467)
+  )
+
+
+# Convert towers to an sf object (EPSG:3978)
+lp_towers_sf <- lp_towers %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
+  st_transform(crs = st_crs(flight_lines.pj))
+
+# Create a 2 km (2000 m) buffer around the 8 towers
+lp_buffer <- st_buffer(lp_towers_sf, dist = 2000) %>%
+  st_union()
+
+
+# ID which tagDeployIDs are within the longpoint tagging location
+tagged_at_lp <- flight_lines.pj %>%
+  st_drop_geometry() %>%
+  distinct(tagDeployID, 
+           lon_tagSite, 
+           lat_tagSite) %>%
+  filter(!is.na(lon_tagSite) & !is.na(lat_tagSite)) %>%
+  st_as_sf(coords = c("lon_tagSite", "lat_tagSite"), crs = 4326) %>%
+  st_transform(crs = st_crs(flight_lines.pj)) %>%
+  filter(lengths(st_intersects(., lp_buffer)) > 0) %>%
+  pull(tagDeployID)
+
+# remove those individuals 
+flight_lines_no_lp <- flight_lines.pj %>%
+  filter(!tagDeployID %in% tagged_at_lp)
+#flight_lines.pj = 4281
+#flight_lines_no_lp = 3051
+
+##need to remake the flight groups:
+
+#spring nocturnal birds
+flight_noLP_noc_bird.pj <- flight_lines_no_lp %>%  
+  filter(season == "Spring",
+    MigrateTime == "nocturnal",
+         Animal == "Bird")
+
+#spring nocturnal takeoff
+flight_noLP_takeoff.pj <- flight_lines_no_lp %>%  
+  filter(MigrateTime == "nocturnal",
+         Animal == "Bird",
+         season == "Spring") %>%  
+  
+  mutate(
+    start_time = ymd_hms(tsStart_dt),
+    sunset_time_dt = ymd_hms(sunset_utc_previous),
+    true_sunset = if_else(
+      hour(start_time) < 12, 
+      sunset_time_dt - days(1), 
+      sunset_time_dt
+    ),
+    
+    # Calculate continuous positive hours
+    hours_since_sunset = as.numeric(difftime(start_time, 
+                                             true_sunset, 
+                                             units = "hours"))
+  ) %>%
+  # Filter for flights starting between 0 and 2 hours after sunset
+  filter(
+    between(hours_since_sunset, -0.5, 2)
+  )
+
+# spring nocturnal landing
+
+flight_noLP_land.pj <- flight_lines_no_lp %>%  
+  filter(
+    MigrateTime == "nocturnal",
+    Animal == "Bird",
+    season == "Spring") %>%  
+  mutate(
+    end_time = ymd_hms(tsEnd_dt),
+    sunrise_time_dt = ymd_hms(sunrise_utc_previous),
+    
+    sunrise_raw_diff = as.numeric(difftime(end_time, 
+                                           sunrise_time_dt, 
+                                           units = "hours")),
+    true_sunrise = case_when(
+      sunrise_raw_diff > 12  ~ sunrise_time_dt + days(1),
+      sunrise_raw_diff < -12 ~ sunrise_time_dt - days(1),
+      TRUE                   ~ sunrise_time_dt
+    ),
+    
+    # Calculate hours relative to sunrise (negative means before sunrise) 
+    hours_relative_to_sunrise = as.numeric(difftime(end_time, 
+                                                    true_sunrise, 
+                                                    units = "hours"))
+  ) %>%
+  
+  filter(
+    between(hours_relative_to_sunrise, -4, 0.5)
+  )
+
+# diurnal birds
+flight_noLP_day_bird.pj <- flight_lines_no_lp %>% 
+  filter(season == "Spring",
+         MigrateTime == "diurnal",
+         Animal == "Bird")
+
+#spring bats
+flight_noLP_bats.pj <- flight_lines_no_lp %>% 
+  filter(season == "Spring",
+         Animal == "Bat")
+
+### fall 
+
+# fall nocturnal birds
+flight_fall_noLP_noc_bird.pj <- flight_lines_no_lp %>%  
+  filter(season == "Fall",
+         MigrateTime == "nocturnal",
+         Animal == "Bird")
+
+#fall nocturnal takeoff
+flight_fall_noLP_takeoff.pj <- flight_lines_no_lp %>%  
+  filter(MigrateTime == "nocturnal",
+         Animal == "Bird",
+         season == "Fall") %>%  
+  
+  mutate(
+    start_time = ymd_hms(tsStart_dt),
+    sunset_time_dt = ymd_hms(sunset_utc_previous),
+    true_sunset = if_else(
+      hour(start_time) < 12, 
+      sunset_time_dt - days(1), 
+      sunset_time_dt
+    ),
+    
+    # Calculate continuous positive hours
+    hours_since_sunset = as.numeric(difftime(start_time, 
+                                             true_sunset, 
+                                             units = "hours"))
+  ) %>%
+  # Filter for flights starting between 0 and 2 hours after sunset
+  filter(
+    between(hours_since_sunset, -0.5, 2)
+  )
+
+# Fall nocturnal landing
+
+flight_fall_noLP_land.pj <- flight_lines_no_lp %>%  
+  filter(
+    MigrateTime == "nocturnal",
+    Animal == "Bird",
+    season == "Fall") %>%  
+  mutate(
+    end_time = ymd_hms(tsEnd_dt),
+    sunrise_time_dt = ymd_hms(sunrise_utc_previous),
+    
+    sunrise_raw_diff = as.numeric(difftime(end_time, 
+                                           sunrise_time_dt, 
+                                           units = "hours")),
+    true_sunrise = case_when(
+      sunrise_raw_diff > 12  ~ sunrise_time_dt + days(1),
+      sunrise_raw_diff < -12 ~ sunrise_time_dt - days(1),
+      TRUE                   ~ sunrise_time_dt
+    ),
+    
+    # Calculate hours relative to sunrise (negative means before sunrise) 
+    hours_relative_to_sunrise = as.numeric(difftime(end_time, 
+                                                    true_sunrise, 
+                                                    units = "hours"))
+  ) %>%
+  
+  filter(
+    between(hours_relative_to_sunrise, -4, 0.5)
+  )
+
+# fall diurnal birds
+flight_fall_noLP_day_bird.pj <- flight_lines_no_lp %>% 
+  filter(season == "Fall",
+         MigrateTime == "diurnal",
+         Animal == "Bird")
+
+#fall bats
+flight_fall_noLP_bats.pj <- flight_lines_no_lp %>% 
+  filter(season == "Fall",
+         Animal == "Bat")
+
+
+
+#=======================================================
+# creating the group layers pre-prioritizr
+# ======================================================
+
+library(dplyr)
+library(terra)
+library(prioritizr)
+library(gurobi)
+library(sf)
+
+prioritizrPrep_pipeline <- function(group_sf, 
+                                    group_name, 
+                                    season = "Spring", 
+                                    percentiles = c(0.75, 
+                                                    0.50, 
+                                                    0.30)) {
+  
+  message(sprintf("Processing per-species upstream-weighted layers for %s (%s)...", 
+                  group_name, 
+                  season))
+  
+  output_dir <- file.path("prioritizrOutput", 
+                          "effortCorrected", 
+                          season, 
+                          group_name)
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  }
+  
+  # Load template
+  master_template_path <- "masterRegionTemplate.tif"
+  if (!file.exists(master_template_path)) {
+    stop("Could not find 'masterRegionTemplate.tif'. Run your template creation script first.")
+  }
+  regionTemplate <- rast(master_template_path)
+  
+  # Load year-specific station effort file
+  effort_rds <- ifelse(grepl("Spring", season, ignore.case = TRUE), 
+                       "SpringDepsDuration.rds", 
+                       "FallDepsDuration.rds")
+  if (!file.exists(effort_rds)) {
+    stop(sprintf("Could not find station effort file: '%s'.", effort_rds))
+  }
+  station_effort_df <- readRDS(effort_rds)
+  
+  # Extract detection arrival year and join on stationID + year
+  group_sf_weighted <- group_sf %>%
+    mutate(
+      arrival_dt = as.POSIXct(tsEnd_dt),
+      year = lubridate::year(arrival_dt)
+    ) %>%
+    left_join(
+      station_effort_df %>% dplyr::select(stationID, year, active_days), 
+      by = c("stationID", "year")
+    ) %>%
+    mutate(
+      active_days = ifelse(is.na(active_days) | active_days < 1, 1, active_days),
+      station_weight = 1 / log(active_days + 1)
+    )
+  
+  species_list <- unique(group_sf_weighted$species)
+  
+  # Cumulative Threshold Function (applied per species surface)
+  apply_cumulative_threshold <- function(r, top_pct) {
+    r_thresh <- r
+    vals <- values(r_thresh, mat = FALSE)
+    valid_idx <- which(!is.na(vals) & vals > 0)
+    
+    if (length(valid_idx) > 0) {
+      pos_vals <- vals[valid_idx]
+      sorted_order <- order(pos_vals, decreasing = TRUE)
+      sorted_vals <- pos_vals[sorted_order]
+      cum_sum <- cumsum(sorted_vals)
+      total_sum <- tail(cum_sum, 1)
+      
+      cutoff_idx <- which(cum_sum >= (total_sum * top_pct))[1]
+      cutoff_val <- sorted_vals[cutoff_idx]
+      
+      r_thresh[r_thresh < cutoff_val] <- 0
+    }
+    return(r_thresh)
+  }
+  
+  # Process each percentile tier independently
+  results_list <- list()
+  
+  for (pct in percentiles) {
+    pct_label <- paste0("top", pct * 100)
+    
+    # Loop through each species, process, and threshold it individually
+    species_rasters_thresh <- lapply(species_list, 
+                                     function(sp_name) {
+                                       df_sp <- group_sf_weighted %>% filter(species == sp_name)
+                                       
+                                       # Rasterize individual species
+                                       flightsRast <- rasterize(vect(df_sp), 
+                                                                regionTemplate, 
+                                                                field = "station_weight", 
+                                                                fun = "sum", 
+                                                                background = 0)
+                                       
+                                       # Gaussian smoothing (5 km bandwidth)
+                                       weightMatrix <- focalMat(flightsRast,
+                                                                d = 5000, type = "Gauss") 
+                                       kdeSurface <- focal(flightsRast, w = weightMatrix, fun = sum, na.rm = TRUE)
+                                       kdeSurface[is.na(kdeSurface) | is.infinite(kdeSurface)] <- 0
+                                       
+                                       # Apply cumulative threshold 
+                                       thresh_surface <- apply_cumulative_threshold(kdeSurface, pct)
+                                       return(thresh_surface)
+                                     })
+    
+    names(species_rasters_thresh) <- species_list
+    
+    # Stack thresholded species together for this percentile
+    thresh_stack <- rast(species_rasters_thresh)
+    
+    file_path <- file.path(output_dir, 
+                           paste0(group_name, "_", 
+                                  pct_label, ".tif"))
+    writeRaster(thresh_stack, 
+                file_path, overwrite = TRUE)
+    
+    results_list[[pct_label]] <- rast(file_path)
+  }
+  
+  # Create uniform cost layer from region template
+  cost_layer <- regionTemplate
+  cost_layer[!is.na(cost_layer)] <- 1
+  names(cost_layer) <- "cost"
+  
+  results_list[["cost_layer"]] <- cost_layer
+  
+  message(sprintf("Finished processing per-species weighted stacks for: %s (%s)!", group_name, season))
+  return(results_list)
+}
+
+########################################################
+### running the above function
+
+### spring
+
+# nocturnal spring birds
+spring_noc_prep <- prioritizrPrep_pipeline(
+  group_sf = flight_noc_bird.pj, 
+  group_name = "nocturnal_birds", 
+  season = "Spring",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
