@@ -39,17 +39,23 @@ tagged_at_lp <- flight_lines.pj %>%
   filter(lengths(st_intersects(., lp_buffer)) > 0) %>%
   pull(tagDeployID)
 
-# remove those individuals 
+# remove those individuals from spring
 flight_lines_no_lp <- flight_lines.pj %>%
   filter(!tagDeployID %in% tagged_at_lp)
 #flight_lines.pj = 4281
 #flight_lines_no_lp = 3051
 
+#remove those individual from fall
+fall_flight_lines_no_lp <- fall_flight_lines.pj%>%
+  filter(!tagDeployID %in% tagged_at_lp)
+#fall flight lines = 4404
+#fall flight lines no lp = 4386
+
 ##need to remake the flight groups:
 
 #spring nocturnal birds
 flight_noLP_noc_bird.pj <- flight_lines_no_lp %>%  
-  filter(season == "Spring",
+  filter(season == "Spring Migration",
     MigrateTime == "nocturnal",
          Animal == "Bird")
 
@@ -57,7 +63,7 @@ flight_noLP_noc_bird.pj <- flight_lines_no_lp %>%
 flight_noLP_takeoff.pj <- flight_lines_no_lp %>%  
   filter(MigrateTime == "nocturnal",
          Animal == "Bird",
-         season == "Spring") %>%  
+         season == "Spring Migration") %>%  
   
   mutate(
     start_time = ymd_hms(tsStart_dt),
@@ -84,7 +90,7 @@ flight_noLP_land.pj <- flight_lines_no_lp %>%
   filter(
     MigrateTime == "nocturnal",
     Animal == "Bird",
-    season == "Spring") %>%  
+    season == "Spring Migration") %>%  
   mutate(
     end_time = ymd_hms(tsEnd_dt),
     sunrise_time_dt = ymd_hms(sunrise_utc_previous),
@@ -110,28 +116,28 @@ flight_noLP_land.pj <- flight_lines_no_lp %>%
 
 # diurnal birds
 flight_noLP_day_bird.pj <- flight_lines_no_lp %>% 
-  filter(season == "Spring",
+  filter(season == "Spring Migration",
          MigrateTime == "diurnal",
          Animal == "Bird")
 
 #spring bats
 flight_noLP_bats.pj <- flight_lines_no_lp %>% 
-  filter(season == "Spring",
+  filter(season == "Spring Migration",
          Animal == "Bat")
 
 ### fall 
 
 # fall nocturnal birds
-flight_fall_noLP_noc_bird.pj <- flight_lines_no_lp %>%  
-  filter(season == "Fall",
+flight_fall_noLP_noc_bird.pj <- fall_flight_lines_no_lp %>%  
+  filter(season == "Fall Migration",
          MigrateTime == "nocturnal",
          Animal == "Bird")
 
 #fall nocturnal takeoff
-flight_fall_noLP_takeoff.pj <- flight_lines_no_lp %>%  
+flight_fall_noLP_takeoff.pj <- fall_flight_lines_no_lp %>%  
   filter(MigrateTime == "nocturnal",
          Animal == "Bird",
-         season == "Fall") %>%  
+         season == "Fall Migration") %>%  
   
   mutate(
     start_time = ymd_hms(tsStart_dt),
@@ -154,11 +160,11 @@ flight_fall_noLP_takeoff.pj <- flight_lines_no_lp %>%
 
 # Fall nocturnal landing
 
-flight_fall_noLP_land.pj <- flight_lines_no_lp %>%  
+flight_fall_noLP_land.pj <- fall_flight_lines_no_lp %>%  
   filter(
     MigrateTime == "nocturnal",
     Animal == "Bird",
-    season == "Fall") %>%  
+    season == "Fall Migration") %>%  
   mutate(
     end_time = ymd_hms(tsEnd_dt),
     sunrise_time_dt = ymd_hms(sunrise_utc_previous),
@@ -183,14 +189,14 @@ flight_fall_noLP_land.pj <- flight_lines_no_lp %>%
   )
 
 # fall diurnal birds
-flight_fall_noLP_day_bird.pj <- flight_lines_no_lp %>% 
-  filter(season == "Fall",
+flight_fall_noLP_day_bird.pj <- fall_flight_lines_no_lp %>% 
+  filter(season == "Fall Migration",
          MigrateTime == "diurnal",
          Animal == "Bird")
 
 #fall bats
-flight_fall_noLP_bats.pj <- flight_lines_no_lp %>% 
-  filter(season == "Fall",
+flight_fall_noLP_bats.pj <- fall_flight_lines_no_lp %>% 
+  filter(season == "Fall Migration",
          Animal == "Bat")
 
 
@@ -217,7 +223,7 @@ prioritizrPrep_pipeline <- function(group_sf,
                   season))
   
   output_dir <- file.path("prioritizrOutput", 
-                          "effortCorrected", 
+                          "noLongpoint", 
                           season, 
                           group_name)
   if (!dir.exists(output_dir)) {
@@ -338,10 +344,84 @@ prioritizrPrep_pipeline <- function(group_sf,
 ### spring
 
 # nocturnal spring birds
-spring_noc_prep <- prioritizrPrep_pipeline(
-  group_sf = flight_noc_bird.pj, 
+spring_noc_noLP <- prioritizrPrep_pipeline(
+  group_sf = flight_noLP_noc_bird.pj, 
   group_name = "nocturnal_birds", 
-  season = "Spring",
+  season = "Spring Migration",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+#spring nocturnal takeoff birds
+spring_noc_noLP <- prioritizrPrep_pipeline(
+  group_sf = flight_noLP_takeoff.pj, 
+  group_name = "nocturnal_takeoff", 
+  season = "Spring Migration",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+#spring nocturnal landing birds
+spring_land_noLP <- prioritizrPrep_pipeline(
+  group_sf = flight_noLP_land.pj, 
+  group_name = "nocturnal_land", 
+  season = "Spring Migration",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+#spring diurnal birds
+spring_day_noLP <- prioritizrPrep_pipeline(
+  group_sf = flight_noLP_day_bird.pj, 
+  group_name = "day_birds", 
+  season = "Spring Migration",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+#spring bats
+spring_day_noLP <- prioritizrPrep_pipeline(
+  group_sf = flight_noLP_bats.pj, 
+  group_name = "bats", 
+  season = "Spring Migration",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+### fall
+
+#fall nocturnal birds
+fall_noc_noLP <- prioritizrPrep_pipeline(
+  group_sf = flight_fall_noLP_noc_bird.pj, 
+  group_name = "nocturnal_birds", 
+  season = "Fall Migration",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+#fall nocturnal takeoff birds
+fall_noc_takeoff <- prioritizrPrep_pipeline(
+  group_sf = flight_fall_noLP_takeoff.pj, 
+  group_name = "nocturnal_takeoff", 
+  season = "Fall Migration",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+#fall nocturnal landing birds
+fall_land_noLP <- prioritizrPrep_pipeline(
+  group_sf = flight_fall_noLP_land.pj, 
+  group_name = "nocturnal_land", 
+  season = "Fall Migration",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+#fall diurnal birds
+fall_day_noLP <- prioritizrPrep_pipeline(
+  group_sf = flight_fall_noLP_day_bird.pj, 
+  group_name = "day_birds", 
+  season = "Fall Migration",
+  percentiles = c(0.75, 0.50, 0.30)
+)
+
+#fall bats
+fall_bats_noLP <- prioritizrPrep_pipeline(
+  group_sf = flight_fall_noLP_bats.pj, 
+  group_name = "bats", 
+  season = "Fall Migration",
   percentiles = c(0.75, 0.50, 0.30)
 )
 
