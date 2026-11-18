@@ -28,11 +28,14 @@ lp_buffer <- st_buffer(lp_towers_sf, dist = 2000) %>%
 
 
 # ID which tagDeployIDs are within the longpoint tagging location
-tagged_at_lp <- flight_lines.pj %>%
-  st_drop_geometry() %>%
-  distinct(tagDeployID, 
-           lon_tagSite, 
-           lat_tagSite) %>%
+tagged_at_lp <- bind_rows(
+  flight_lines.pj %>% st_drop_geometry() %>% distinct(tagDeployID, 
+                                                      lon_tagSite, lat_tagSite),
+  fall_flight_lines.pj %>% st_drop_geometry() %>% distinct(tagDeployID, 
+                                                           lon_tagSite, 
+                                                           lat_tagSite)
+) %>%
+  distinct(tagDeployID, lon_tagSite, lat_tagSite) %>%
   filter(!is.na(lon_tagSite) & !is.na(lat_tagSite)) %>%
   st_as_sf(coords = c("lon_tagSite", "lat_tagSite"), crs = 4326) %>%
   st_transform(crs = st_crs(flight_lines.pj)) %>%
@@ -49,7 +52,7 @@ flight_lines_no_lp <- flight_lines.pj %>%
 fall_flight_lines_no_lp <- fall_flight_lines.pj%>%
   filter(!tagDeployID %in% tagged_at_lp)
 #fall flight lines = 4404
-#fall flight lines no lp = 4386
+#fall flight lines no lp = 3666
 
 ##need to remake the flight groups:
 
@@ -859,4 +862,164 @@ plot_group_scenario_maps("nocturnal_land", season = "Fall Migration")
 plot_group_scenario_maps("day_birds", season = "Fall Migration")
 plot_group_scenario_maps("bats", season = "Fall Migration")
 
+#=========================================================
+# Selection frequency plot (Effort-Corrected)
+#=========================================================
+library(terra)
+library(sf)
+library(maptiles)
+library(ggplot2)
+library(tidyterra)
+
+# Create the station file for plotting later (run once)
+stations <- read.csv("StationDownloads/Motus-data-region-undefined_stations_downloaded-2026-09-09.csv")
+stations.sf <- st_as_sf(stations,
+                        coords = c("longitude", "latitude"),
+                        crs = 4326)
+stations_pj <- st_transform(stations.sf, crs = 3978)
+
+GLWatershed <- st_read("./greatlakes_subbasins/greatlakes_subbasins.shp", quiet = TRUE)
+GLWS_proj2 <- st_transform(GLWatershed, crs = 3978)
+
+# Filter points outside of the watershed
+stations_pj2 <- stations_pj %>%
+  st_filter(GLWS_proj2)
+
+## Selection frequency plot function 
+
+plot_selection_frequency <- function(group_name,
+                                     season = "Spring") {
+  
+  # Updated file path to include 'effortCorrected'
+  output_dir <- file.path("prioritizrOutput", 
+                          "noLongpoint",
+                          season,
+                          group_name)
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  }
+  
+  # Mapping extent and basemap
+  smaller_extent <- st_as_sfc(st_bbox(
+    c(xmin = -94.46, 
+      xmax = -74.24, 
+      ymin = 40, 
+      ymax = 48), 
+    crs = 4326
+  ))
+  smaller_extent.pj <- st_transform(smaller_extent, crs = 3978)
+  
+  tiles <- get_tiles(
+    x = smaller_extent.pj, 
+    provider = "Esri.WorldGrayCanvas", 
+    zoom = 8, 
+    crop = TRUE
+  )
+  b <- st_bbox(tiles)
+  
+  # Load the files from the effort-corrected directory
+  scenario_files <- list.files(path = output_dir, 
+                               pattern = "^scenario_.*\\.rds$", 
+                               full.names = TRUE)
+  
+  if (length(scenario_files) == 0) {
+    stop(sprintf("No scenario files found in directory: '%s'", output_dir))
+  }
+  
+  message(sprintf("Processing %d scenarios for [%s - %s]...", 
+                  length(scenario_files), 
+                  group_name,
+                  season))
+  
+  # Use the first file as a template for the summed freq file
+  first_data <- readRDS(scenario_files[1])
+  sum_raster <- terra::unwrap(first_data$solution_raster)
+  
+  # Loop through remaining files and add them together
+  if (length(scenario_files) > 1) {
+    for (i in 2:length(scenario_files)) {
+      data <- readRDS(scenario_files[i])
+      r <- terra::unwrap(data$solution_raster)
+      sum_raster <- sum_raster + r
+    }
+  }
+  
+  # Convert sum to proportion (0 to 1)
+  freq_raster <- sum_raster / length(scenario_files)
+  
+  # Crop to smaller extent
+  freq_cropped <- terra::crop(freq_raster, 
+                              ext(b["xmin"], b["xmax"], b["ymin"], b["ymax"]))
+  
+  # Plot
+  p_freq <- ggplot() +
+    geom_spatraster_rgb(data = tiles, maxcell = 500000) +
+    geom_spatraster(data = freq_cropped, 
+                    na.rm = TRUE,
+                    maxcell = 500000) + 
+    scale_fill_viridis_c(
+      option = "plasma", 
+      name = "Selection\nFrequency",
+      na.value = "transparent",
+      limits = c(0.01, 1)
+    ) +
+    geom_sf(
+      data = stations_pj2, 
+      color = "black",
+      fill = NA,
+      size = 2,
+      stroke = 0.3,
+      shape = 21
+    ) +
+    labs(
+      title = paste("Selection Frequency Across Scenarios:", group_name),
+      subtitle = paste("Season:", season)
+    ) +
+    theme_minimal() +
+    coord_sf(
+      xlim = c(b["xmin"], b["xmax"]), 
+      ylim = c(b["ymin"], b["ymax"]), 
+      expand = FALSE
+    )
+  
+  # Save PDF into the group's nested folder
+  pdf_filename <- file.path(output_dir,
+                            paste0("Selection_Frequency_Map_", group_name, ".pdf"))
+  ggsave(pdf_filename, plot = p_freq, width = 8, height = 6)
+  
+  message(sprintf("Selection frequency map successfully saved to '%s'", pdf_filename))
+  return(p_freq)
+}
+
+######################################
+#running the selection frequency map function above
+
+##  spring
+
+noc_birds_selection <- plot_selection_frequency("nocturnal_birds", 
+                                                season = "Spring Migration")
+noc_takeoff_selection <- plot_selection_frequency("nocturnal_takeoff", 
+                                                  season = "Spring Migration")
+noc_land_selection <- plot_selection_frequency("nocturnal_land", 
+                                               season = "Spring Migration")
+day_selection <- plot_selection_frequency("day_birds", 
+                                          season = "Spring Migration")
+bat_selection <- plot_selection_frequency("bats", 
+                                          season = "Spring Migration")
+
+##  fall
+noc_birds_selection <- plot_selection_frequency("nocturnal_birds", 
+                                                season = "Fall Migration")
+
+noc_takeoff_selection <- plot_selection_frequency("nocturnal_takeoff", 
+                                                  season = "Fall Migration")
+
+noc_land_selection <- plot_selection_frequency("nocturnal_land", 
+                                               season = "Fall Migration")
+
+day_birds_selection <- plot_selection_frequency("day_birds", 
+                                                season = "Fall Migration")
+
+fall_bats_selection <- plot_selection_frequency("bats", 
+                                                season = "Fall Migration")
 
