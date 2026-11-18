@@ -186,7 +186,7 @@ fall_noc_prep <- prioritizrPrep_pipeline(
   percentiles = c(0.75, 0.50, 0.30)
 )
 
-fall_takeoff_bird <- st_read("flight_noc_takeoff.pj.gpkg")
+fall_takeoff_bird <- st_read("fall_takeoff_Bird_nocturnal.gpkg")
 
 fall_takeoff_prep <- prioritizrPrep_pipeline(
   group_sf = fall_takeoff_bird, 
@@ -195,7 +195,7 @@ fall_takeoff_prep <- prioritizrPrep_pipeline(
   percentiles = c(0.75, 0.50, 0.30)
 )
 
-fall_land_bird <- st_read("flight_noc_land.pj.gpkg")
+fall_land_bird <- st_read("fall_land_Bird_nocturnal.gpkg")
 
 fall_takeoff_prep <- prioritizrPrep_pipeline(
   group_sf = fall_land_bird, 
@@ -207,7 +207,7 @@ fall_takeoff_prep <- prioritizrPrep_pipeline(
 fall_day_bird <- st_read("fall_all_Bird_diurnal.gpkg")
 
 fall_day_prep <- prioritizrPrep_pipeline(
-  group_sf = fall_land_bird, 
+  group_sf = fall_day_bird, 
   group_name = "day_birds", 
   season = "Fall",
   percentiles = c(0.75, 0.50, 0.30)
@@ -372,7 +372,7 @@ fall_takeoff_results <- prioritizr_pipeline(
   season = "Fall"
 )
 
-fall_takeoff_results <- prioritizr_pipeline(
+fall_land_results <- prioritizr_pipeline(
   group_name = "nocturnal_land", 
   season = "Fall"
 )
