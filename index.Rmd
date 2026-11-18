@@ -325,6 +325,21 @@ htmltools::tags$iframe(
 
 ```
 
+### Spring nocturnal birds with Long Point tagged birds removed
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/noLongpoint/Spring Migration/nocturnal_birds/Selection_Frequency_Map_nocturnal_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
 
 ### Fall all nocturnal birds selection frequency map (effort corrected)
 
@@ -343,6 +358,23 @@ htmltools::tags$iframe(
 
 ```
 
+### Fall nocturnal birds with Long Point tagged birds removed
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/noLongpoint/Fall Migration/nocturnal_birds/Selection_Frequency_Map_nocturnal_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+
 ### This is the selection frequency for spring nocturnal takeoff (effort corrected)
 
 ```{r}
@@ -352,6 +384,22 @@ htmltools::tags$iframe(
 
 htmltools::tags$iframe(
   src = "prioritizrOutput/effortCorrected/Spring/nocturnal_takeoff/Selection_Frequency_Map_nocturnal_takeoff.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### Spring nocturnal takeoff with Long Point tagged birds removed
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/noLongpoint/Spring Migration/nocturnal_takeoff/Selection_Frequency_Map_nocturnal_takeoff.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -375,6 +423,22 @@ htmltools::tags$iframe(
 
 ```
 
+### Fall nocturnal take off Long Point tagged birds removed
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/noLongpoint/Fall Migration/nocturnal_takeoff/Selection_Frequency_Map_nocturnal_takeoff.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
 ### This is the selection frequency for spring nocturnal landing (Effort corrected)
 
 ```{r}
@@ -384,6 +448,22 @@ htmltools::tags$iframe(
 
 htmltools::tags$iframe(
   src = "prioritizrOutput/effortCorrected/Spring/nocturnal_land/Selection_Frequency_Map_nocturnal_land.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### spring nocturnal landing long point tagged birds removed
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/noLongpoint/Spring Migration/nocturnal_land/Selection_Frequency_Map_nocturnal_land.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -407,6 +487,22 @@ htmltools::tags$iframe(
 
 ```
 
+### Fall nocturnal landing long point tagged birds removed
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/noLongpoint/Fall Migration/nocturnal_land/Selection_Frequency_Map_nocturnal_land.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
 ### The selection frequency for spring diurnal birds (Effort corrected)
 
 ```{r}
@@ -416,6 +512,22 @@ htmltools::tags$iframe(
 
 htmltools::tags$iframe(
   src = "prioritizrOutput/effortCorrected/Spring/day_birds/Selection_Frequency_Map_day_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### spring diurnal birds long point tagged birds removed
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/noLongpoint/Spring Migration/day_birds/Selection_Frequency_Map_day_birds.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
@@ -439,6 +551,22 @@ htmltools::tags$iframe(
 
 ```
 
+### fall diurnal migrants long point tagged birds removed
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/noLongpoint/Fall Migration/day_birds/Selection_Frequency_Map_day_birds.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
 ### The selection frequency for all spring bats (effort corrected)
 
 ```{r}
@@ -455,6 +583,21 @@ htmltools::tags$iframe(
 
 ```
 
+### spring bats, long point tagged bats removed
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/noLongpoint/Spring Migration/bats/Selection_Frequency_Map_bats.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+```
+
 ### The selection frequency for fall bats (effort corrected)
 
 ```{r}
@@ -464,6 +607,22 @@ htmltools::tags$iframe(
 
 htmltools::tags$iframe(
   src = "prioritizrOutput/effortCorrected/Fall/bats/Selection_Frequency_Map_bats.pdf",
+  width = "100%",
+  height = "600px",
+  style = "border: none;"
+)
+
+```
+
+### fall bats, long point tagged bats removed
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+htmltools::tags$iframe(
+  src = "prioritizrOutput/noLongpoint/Fall Migration/bats/Selection_Frequency_Map_bats.pdf",
   width = "100%",
   height = "600px",
   style = "border: none;"
