@@ -49,6 +49,12 @@ fall_flight_lines <- st_sf(fall_flight_steps,
                       geometry = st_sfc(geoms, 
                                         crs = 4326))
 
+
+fall_flight_lines.pj <- st_transform(fall_flight_lines, crs = 3978)
+
+# Save the master file so it lives permanently in your project directory
+st_write(fall_flight_lines.pj, "fall_flight_lines_projected.gpkg", delete_layer = TRUE)
+
 #===========================================================
 # creating a figure of search effort
 # ======================================================
